@@ -294,32 +294,6 @@ For development workflow and shared utilities management, see [Shared Files Auto
 4. Update documentation as needed
 5. Submit a pull request
 
-## Cost
-
-Note that these prices vary over time, these estimates are based on at the time of development of the project.
-The cost for this solution primarily comes from two main components: the Inference Endpoint and the Processing Pipeline.
-
-### Inference Endpoint
-
-The Inference Endpoint is the primary cost driver for this solution. It uses an ml.g4dn.2xlarge instance, which has the following pricing options:
-
-- On-Demand: $879/month
-- Capacity Reservation: $323/month
-
-### Processing Pipeline Costs (100 P&IDs/month)
-
-The processing pipeline includes several AWS services. Here's a breakdown of the estimated monthly costs for processing 100 P&IDs per month:
-
-| Service            | Usage Pattern     | Monthly Cost (USD) | Scaling Factor              |
-| ------------------ | ----------------- | ------------------ | --------------------------- |
-| Amazon Bedrock     | OCR processing    | $105               | Linear with document volume |
-| AWS Step Functions | State transitions | Free tier          | Minimal until high volume   |
-| AWS Lambda         | Few invocations   | $0.20              | Negligible cost             |
-
-### Additional Costs
-
-- **Training Sessions**: $44 per session (assuming 6-hour duration) using an ml.g6.2xlarge instance.
-- **Model Storage**: $3/month for 30GB GP2 storage.
 
 ## Notice
 
