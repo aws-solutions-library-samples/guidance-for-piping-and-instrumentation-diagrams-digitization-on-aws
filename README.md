@@ -301,7 +301,7 @@ The cost for this solution primarily comes from two main components: the Inferen
 
 ### Inference Endpoint
 
-The Inference Endpoint is the primary cost driver for this solution. It uses an ml.g6.2xlarge instance, which has the following pricing options:
+The Inference Endpoint is the primary cost driver for this solution. It uses an ml.g4dn.2xlarge instance, which has the following pricing options:
 
 - On-Demand: $879/month
 - Capacity Reservation: $323/month
