@@ -1,0 +1,26 @@
+{
+  "name": "pnid-processing-cdk",
+  "version": "1.0.0",
+  "description": "P&ID Processing Pipeline CDK Infrastructure",
+  "scripts": {
+    "build": "npm run sync-shared-files && tsc",
+    "sync-shared-files": "node scripts/sync-shared-files.js",
+    "watch": "tsc -w",
+    "test": "jest",
+    "cdk": "cdk"
+  },
+  "devDependencies": {
+    "@types/jest": "29.5.14",
+    "@types/node": "22.15.21",
+    "aws-cdk": "2.1016.1",
+    "jest": "29.7.0",
+    "ts-node": "10.9.2",
+    "typescript": "5.8.3"
+  },
+  "dependencies": {
+    "@aws-cdk/aws-lambda-python-alpha": "^2.199.0-alpha.0",
+    "aws-cdk-lib": "2.199.0",
+    "cdk-nag": "^2.36.2",
+    "constructs": "10.4.2"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "vpc": {
+    "vpcId": "",
+    "subnetIds": [],
+    "createVpcEndpoints": true
+  },
+  "endpoints": {
+    "sagemaker": true,
+    "bedrock": true,
+    "logs": true
+  },
+  "model": {
+    "s3Uri": ""
+  }
+}

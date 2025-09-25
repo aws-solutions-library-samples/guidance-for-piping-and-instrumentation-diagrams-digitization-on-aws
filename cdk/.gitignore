@@ -1,0 +1,12 @@
+node_modules
+cdk.out
+cdk.context.json
+dist/
+config.json
+__pycache__
+# Ignore shared files copied to lambda directories (but keep sources in shared/)
+lambda/*/config_helper.py
+lambda/*/coordinate_transform.py  
+lambda/*/execution_paths.py
+lambda/*/debug_image_utils.py
+!lambda/shared/*

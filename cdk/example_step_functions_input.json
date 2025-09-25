@@ -1,0 +1,40 @@
+{
+  "image_key": "path/to/your/image.png",
+  "input_bucket": "your-input-bucket",
+  "processing_config": {
+    "notes_processing": {
+      "manual_coordinates": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0
+      },
+      "remove_notes_section": true,
+      "frame_config": {
+        "remove_frame": true,
+        "frame_detection_sensitivity": 0.8,
+        "min_frame_thickness": 3,
+        "max_frame_thickness": 25
+      }
+    },
+    "line_detection": {
+      "max_line_gap": 150,
+      "threshold": 4,
+      "min_line_length": 10,
+      "postprocess_params": {
+        "merge_distance_threshold": 0.025,
+        "angular_tolerance": 20.0
+      }
+    },
+    "graph_generation": {
+      "distance_threshold_symbols": 80,
+      "distance_threshold_text": 40,
+      "junction_detection_tolerance": 12.0,
+      "component_filter": {
+        "enabled": true,
+        "min_component_size": 5,
+        "max_line_density": 0.8
+      }
+    }
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "notes_processing": {
+    "manual_coordinates": {
+      "x": 0,
+      "y": 0,
+      "width": -1,
+      "height": -1
+    },
+    "remove_notes_section": true,
+    "frame_config": {
+      "remove_frame": true,
+      "frame_detection_sensitivity": 0.7,
+      "min_frame_thickness": 2,
+      "max_frame_thickness": 20,
+      "edge_margin_ratio": 0.05,
+      "safety_margin": 5,
+      "min_line_length_ratio": 0.7
+    }
+  },
+  "line_detection": {
+    "max_line_gap": 100,
+    "threshold": 3,
+    "min_line_length": 8,
+    "rho": 0.5,
+    "theta_param": 180,
+    "enable_thinning": true,
+    "postprocess_params": {
+      "merge_distance_threshold": 0.02,
+      "angular_tolerance": 15.0,
+      "min_line_length": 0.0001,
+      "extension_padding": 0.01,
+      "enable_symbol_intersection": true
+    }
+  },
+  "graph_generation": {
+    "distance_threshold_symbols": 60,
+    "distance_threshold_text": 30,
+    "distance_threshold_lines": 20,
+    "line_buffer": 5,
+    "symbol_distance_threshold": 100,
+    "symbol_overlap_threshold": 0.3,
+    "symbol_text_association_threshold": 80,
+    "symbol_text_fallback_threshold": 120,
+    "junction_detection_tolerance": 10.0,
+    "t_junction_endpoint_threshold": 15.0,
+    "junction_clustering_radius": 20.0,
+    "junction_angle_tolerance": 15.0,
+    "minimum_line_length": 5.0,
+    "intersection_snap_distance": 5.0,
+    "line_aberration_tolerance": 5.0,
+    "junction_proximity_threshold": 10.0,
+    "max_merge_iterations": 5,
+    "geometric_continuation_tolerance": 20.0,
+    "component_filter": {
+      "enabled": false,
+      "min_component_size": 3,
+      "max_line_density": 0.9,
+      "min_symbol_density": 0.1,
+      "max_notes_component_size": 15,
+      "frame_aspect_ratio_threshold": 0.1,
+      "max_symbol_density_for_removal": 0.1,
+      "extreme_symbol_density_threshold": 0.05
+    }
+  },
+  "text_detection": {
+    "timeout_seconds": 300,
+    "max_retries": 3
+  },
+  "symbol_detection": {
+    "confidence_threshold": 0.9,
+    "nms_threshold": 0.4
+  },
+  "graph_visualization": {
+    "output_format": "png",
+    "dpi": 300,
+    "line_width": 2,
+    "node_size": 10
+  }
+}
