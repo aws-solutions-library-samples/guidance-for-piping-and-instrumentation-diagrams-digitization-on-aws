@@ -6,12 +6,13 @@ A comprehensive AWS-based pipeline for processing Piping and Instrumentation Dia
 
 - [Overview](#overview)
 - [Architecture](#architecture)
+- [Cost](#cost)
 - [Quick Start](#quick-start)
 - [Usage Examples](#usage-examples)
 - [Output Structure](#output-structure)
 - [Documentation](#documentation)
-- [Cost](#cost)
-
+- [Notices](#notice)
+- [Cleanup](#cleanup)
 
 ## Overview
 
@@ -30,6 +31,36 @@ This pipeline processes P&ID diagrams through a series of automated steps:
 
 ![Architecture Diagram](docs/architecture.png)
 
+## Cost
+
+You are responsible for the cost of the AWS services used while running this Guidance. As of December 2024, the cost for running this Guidance with the default settings in the US East (N. Virginia) region is approximately $879.00 per month for processing 100 P&ID records.
+
+The cost for this solution primarily comes from two main components: the Inference Endpoint and the Processing Pipeline.
+
+### Inference Endpoint
+
+The Inference Endpoint is the primary cost driver for this solution. It uses an ml.g6.2xlarge instance, which has the following pricing options:
+
+- On-Demand: $879/month
+- Capacity Reservation: $323/month
+
+### Processing Pipeline Costs (100 P&IDs/month)
+
+The processing pipeline includes several AWS services. Here's a breakdown of the estimated monthly costs for processing 100 P&IDs per month:
+
+| Service            | Usage Pattern     | Monthly Cost (USD) | Scaling Factor              |
+| ------------------ | ----------------- | ------------------ | --------------------------- |
+| Amazon Bedrock     | OCR processing    | $105               | Linear with document volume |
+| AWS Step Functions | State transitions | Free tier          | Minimal until high volume   |
+| AWS Lambda         | Few invocations   | $0.20              | Negligible cost             |
+
+### Additional Costs
+
+- **Training Sessions**: $44 per session (assuming 6-hour duration) using an ml.g6.2xlarge instance.
+- **Model Storage**: $3/month for 30GB GP2 storage.
+
+Note that these prices vary over time, these estimates are based on pricing at the time of development of the project.
+
 ## Quick Start
 
 ### Prerequisites
@@ -42,56 +73,62 @@ This pipeline processes P&ID diagrams through a series of automated steps:
 ### Basic Deployment
 
 1. **Clone and install dependencies**:
+
    ```bash
    git clone <repository-url>
-   cd cognite/cdk
+   cd <project-folder-name>/cdk
    npm install
    pip install -r requirements.txt
    ```
 
 2. **Build the project**:
+
    ```bash
    npm run build
    ```
+
    This step is **required** - it syncs shared utilities between Lambda functions and compiles TypeScript.
 
 3. **Bootstrap CDK (first time only)**:
+
    ```bash
    cdk bootstrap
    ```
 
 4. **Configure infrastructure**:
+
    ```bash
    cp config.json.template config.json
    ```
-   
+
    **Edit `cdk/config.json` with your AWS settings:**
-   
+
    ```json
    {
      "vpc": {
-       "vpcId": "vpc-0707a2051b2e94275",           // Your VPC ID (required)
-       "subnetIds": ["subnet-xxx", "subnet-yyy"],   // Private subnets in different AZs (required)
-       "createVpcEndpoints": true                   // Recommended for security
+       "vpcId": "vpc-0707a2051b2e94275", // Your VPC ID (required)
+       "subnetIds": ["subnet-xxx", "subnet-yyy"], // Private subnets in different AZs (required)
+       "createVpcEndpoints": true // Recommended for security
      },
      "endpoints": {
-       "sagemaker": true,    // Required for symbol detection
-       "bedrock": true,      // Required for text detection  
-       "logs": true          // Recommended for performance
+       "sagemaker": true, // Required for symbol detection
+       "bedrock": true, // Required for text detection
+       "logs": true // Recommended for performance
      },
      "model": {
-       "s3Uri": "s3://your-bucket/path/to/model.tar.gz"  // Required: trained model location
+       "s3Uri": "s3://your-bucket/path/to/model.tar.gz" // Required: trained model location
      }
    }
    ```
-   
+
    **Required Configuration Steps:**
-   
+
    - **VPC ID**: Find your VPC ID in AWS Console → VPC → Your VPCs
    - **Subnet IDs**: Use private subnets in different Availability Zones
    - **Model S3 URI**: Upload your trained SageMaker model to S3 and provide the URI
 
 5. **Deploy infrastructure**:
+
    ```bash
    # Deploy with default name (PNIDDigitization)
    cdk deploy
@@ -102,10 +139,11 @@ This pipeline processes P&ID diagrams through a series of automated steps:
    ```
 
 6. **Process an image**:
+
    ```bash
    # Upload image to input bucket
    aws s3 cp your-pnid.png s3://your-input-bucket/
-   
+
    # Or manually execute Step Functions
    aws stepfunctions start-execution \
      --state-machine-arn <your-state-machine-arn> \
@@ -115,6 +153,7 @@ This pipeline processes P&ID diagrams through a series of automated steps:
 ## Usage Examples
 
 ### Basic Processing
+
 ```json
 {
   "image_key": "diagrams/pnid-001.png",
@@ -124,6 +163,7 @@ This pipeline processes P&ID diagrams through a series of automated steps:
 ```
 
 ### Custom Line Detection
+
 ```json
 {
   "image_key": "complex-diagram.png",
@@ -140,6 +180,7 @@ This pipeline processes P&ID diagrams through a series of automated steps:
 ```
 
 ### Manual Coordinates Processing
+
 ```json
 {
   "image_key": "diagram-with-notes.png",
@@ -147,7 +188,10 @@ This pipeline processes P&ID diagrams through a series of automated steps:
   "processing_config": {
     "notes_processing": {
       "manual_coordinates": {
-        "x": 100, "y": 50, "width": 800, "height": 600
+        "x": 100,
+        "y": 50,
+        "width": 800,
+        "height": 600
       }
     }
   }
@@ -159,6 +203,7 @@ For more examples and detailed parameter explanations, see the [Configuration Gu
 ## Output Structure
 
 ### S3 Organization
+
 Results are organized by execution ID for traceability:
 
 ```
@@ -194,13 +239,24 @@ s3://output-bucket/
 ### Key Output Formats
 
 **Graph Data Structure**:
+
 ```json
 {
-  "symbols": [{"id": "1", "type": "pump", "bbox": [245, 156, 290, 199]}],
-  "lines": [{"id": "45", "points": [[245, 178], [456, 178]]}],
-  "junctions": [{"id": "3", "point": [456, 178], "junction_type": "t_junction"}],
-  "connections": [{"from": "symbol-1", "to": "line-45"}],
-  "graph_stats": {"num_nodes": 224, "num_edges": 312}
+  "symbols": [{ "id": "1", "type": "pump", "bbox": [245, 156, 290, 199] }],
+  "lines": [
+    {
+      "id": "45",
+      "points": [
+        [245, 178],
+        [456, 178]
+      ]
+    }
+  ],
+  "junctions": [
+    { "id": "3", "point": [456, 178], "junction_type": "t_junction" }
+  ],
+  "connections": [{ "from": "symbol-1", "to": "line-45" }],
+  "graph_stats": { "num_nodes": 224, "num_edges": 312 }
 }
 ```
 
@@ -220,8 +276,9 @@ For complete data format specifications, see the [API Reference](docs/API_REFERE
 ### Getting Help
 
 For issues and questions:
+
 - **Check [Troubleshooting Guide](docs/TROUBLESHOOTING.md)** for common solutions
-- **Review CloudWatch logs** for detailed error information  
+- **Review CloudWatch logs** for detailed error information
 - **Test with simplified configurations** to isolate issues
 - **Create an issue** in the repository with complete error details
 
@@ -237,8 +294,8 @@ For development workflow and shared utilities management, see [Shared Files Auto
 4. Update documentation as needed
 5. Submit a pull request
 
-
 ## Cost
+
 Note that these prices vary over time, these estimates are based on at the time of development of the project.
 The cost for this solution primarily comes from two main components: the Inference Endpoint and the Processing Pipeline.
 
@@ -253,18 +310,66 @@ The Inference Endpoint is the primary cost driver for this solution. It uses an 
 
 The processing pipeline includes several AWS services. Here's a breakdown of the estimated monthly costs for processing 100 P&IDs per month:
 
-| Service | Usage Pattern | Monthly Cost (USD) | Scaling Factor |
-|---------|---------------|---------------------|----------------|
-| Amazon Bedrock | OCR processing | $105 | Linear with document volume |
-| AWS Step Functions | State transitions | Free tier | Minimal until high volume |
-| AWS Lambda | Few invocations | $0.20 | Negligible cost |
+| Service            | Usage Pattern     | Monthly Cost (USD) | Scaling Factor              |
+| ------------------ | ----------------- | ------------------ | --------------------------- |
+| Amazon Bedrock     | OCR processing    | $105               | Linear with document volume |
+| AWS Step Functions | State transitions | Free tier          | Minimal until high volume   |
+| AWS Lambda         | Few invocations   | $0.20              | Negligible cost             |
 
 ### Additional Costs
 
 - **Training Sessions**: $44 per session (assuming 6-hour duration) using an ml.g6.2xlarge instance.
 - **Model Storage**: $3/month for 30GB GP2 storage.
 
+## Notice
+
+Customers are responsible for making their own independent assessment of the information in this Guidance. This Guidance: (a) is for informational purposes only, (b) represents AWS current product offerings and practices, which are subject to change without notice, and (c) does not create any commitments or assurances from AWS and its affiliates, suppliers or licensors. AWS products or services are provided “as is” without warranties, representations, or conditions of any kind, whether express or implied. AWS responsibilities and liabilities to its customers are controlled by AWS agreements, and this Guidance is not part of, nor does it modify, any agreement between AWS and its customers.
+
+## Cleanup
+
+Include detailed instructions, commands, and console actions to delete the deployed Guidance.
+If the Guidance requires manual deletion of resources, such as the content of an S3 bucket, please specify.
+
+### Delete CDK Stack
+
+1. **Delete the CDK stack**:
+
+   ```bash
+   cd cdk
+   cdk destroy
+   ```
+
+2. **Confirm deletion** when prompted by typing `y`
+
+### Manual Cleanup (if needed)
+
+If the CDK destroy command doesn't remove all resources, manually delete:
+
+1. **S3 Buckets**: Empty and delete the input and output buckets
+
+   ```bash
+   aws s3 rm s3://your-input-bucket --recursive
+   aws s3 rm s3://your-output-bucket --recursive
+   aws s3 rb s3://your-input-bucket
+   aws s3 rb s3://your-output-bucket
+   ```
+
+2. **SageMaker Endpoint**: Delete the endpoint if it wasn't removed
+
+   ```bash
+   aws sagemaker delete-endpoint --endpoint-name <endpoint-name>
+   aws sagemaker delete-endpoint-config --endpoint-config-name <endpoint-config-name>
+   aws sagemaker delete-model --model-name <model-name>
+   ```
+
+3. **CloudWatch Log Groups**: Delete log groups if needed
+
+   ```bash
+   aws logs delete-log-group --log-group-name /aws/lambda/<function-name>
+   ```
+
+4. **VPC Endpoints**: If created, these will be automatically deleted with the stack
 
 ## License
 
-This project is licensed under the Amazon Software License (ASL).
+This project is licensed under the MIT License.
