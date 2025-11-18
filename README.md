@@ -5,6 +5,7 @@ A comprehensive AWS-based pipeline for processing Piping and Instrumentation Dia
 ## Table of Contents
 
 - [Overview](#overview)
+- [Pre-trained Model](#pre-trained-model)
 - [Architecture](#architecture)
 - [Cost](#cost)
 - [Quick Start](#quick-start)
@@ -26,6 +27,23 @@ This pipeline processes P&ID diagrams through a series of automated steps:
 4. **Line Detection** - Detects connecting lines using computer vision
 5. **Graph Generation** - Creates structured graph representation
 6. **Visualization** - Generates visualization outputs
+
+## Pre-trained Model
+
+### Download
+
+Download the pre-trained symbol detection model from the [Releases](https://github.com/aws-solutions-library-samples/guidance-for-piping-and-instrumentation-diagrams-digitization-on-aws/releases) page.
+
+**Latest Release**: [v1.0.0](https://github.com/aws-solutions-library-samples/guidance-for-piping-and-instrumentation-diagrams-digitization-on-aws/releases/tag/v1.0.0)
+
+```bash
+# Download the model
+wget https://github.com/aws-solutions-library-samples/guidance-for-piping-and-instrumentation-diagrams-digitization-on-aws/releases/download/v1.0.0/model.tar.gz
+
+# Upload to your S3 bucket
+aws s3 cp model.tar.gz s3://your-bucket-name/models/symbol-detection/
+```
+
 
 ## Architecture
 
@@ -98,6 +116,11 @@ Note that these prices vary over time, these estimates are based on pricing at t
 4. **Configure infrastructure**:
 
    ```bash
+   # Download from releases
+   wget https://github.com/aws-solutions-library-samples/guidance-for-piping-and-instrumentation-diagrams-digitization-on-aws/releases/download/v1.0.0/model.tar.gz
+
+   # Upload to your S3 bucket
+   aws s3 cp model.tar.gz s3://your-bucket-name/models/symbol-detection/
    cp config.json.template config.json
    ```
 
@@ -116,13 +139,13 @@ Note that these prices vary over time, these estimates are based on pricing at t
        "logs": true // Recommended for performance
      },
      "model": {
-       "s3Uri": "s3://your-bucket/path/to/model.tar.gz" // Required: trained model location
+       "s3Uri": "s3://your-bucket/path/to/model.tar.gz" // S3 URI from releases containing the model tar
      }
    }
    ```
 
    **Required Configuration Steps:**
-
+   - **Download Model**: Get the model from releases and upload to S3
    - **VPC ID**: Find your VPC ID in AWS Console → VPC → Your VPCs
    - **Subnet IDs**: Use private subnets in different Availability Zones
    - **Model S3 URI**: Upload your trained SageMaker model to S3 and provide the URI
