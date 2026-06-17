@@ -6,11 +6,9 @@ const path = require('path');
 // Shared file mapping - defines which shared files each lambda function needs
 const sharedFileMapping = {
   'input_validator': ['config_helper.py', 'execution_paths.py'],
-  'text_detection': ['config_helper.py', 'execution_paths.py', 'debug_image_utils.py'], 
   'graph_generator': ['config_helper.py', 'coordinate_transform.py', 'execution_paths.py'],
   'symbol_detection': ['config_helper.py', 'coordinate_transform.py', 'execution_paths.py', 'debug_image_utils.py'],
-  // line_detection and graph_visualization use Docker and copy directly from shared/ - no sync needed
-  'notes_processor': ['config_helper.py', 'execution_paths.py'],
+  // line_detection, graph_visualization, text_detection, notes_processor use Docker and copy directly from shared/ - no sync needed
 };
 
 const lambdaDir = path.join(__dirname, '../lambda');

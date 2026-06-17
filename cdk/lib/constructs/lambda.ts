@@ -40,8 +40,8 @@ export class ProcessingConstruct extends Construct {
   public readonly graphGenerator: lambda.Function;
   public readonly graphVisualization: lambda.DockerImageFunction;
   public readonly symbolDetection: lambda.Function;
-  public readonly textDetection: lambda.Function;
-  public readonly notesProcessor: lambda.Function;
+  public readonly textDetection: lambda.DockerImageFunction;
+  public readonly notesProcessor: lambda.DockerImageFunction;
   public readonly bdaProject: bedrock.CfnDataAutomationProject;
 
 
@@ -188,10 +188,13 @@ export class ProcessingConstruct extends Construct {
       ...commonLambdaConfig,
     });
 
-    // Text Detection Lambda Function
-    this.textDetection = createPythonLambdaWithShared('TextDetection', 'lambda/text_detection', sharedFileMapping['text_detection'], {
-      index: 'index.py',
-      handler: 'lambda_handler',
+    // Text Detection Lambda Function (Container-based for OpenCV on Python 3.13)
+    // Python zip would exceed the 250MB unzipped limit, so we use a container image.
+    this.textDetection = new lambda.DockerImageFunction(this, 'TextDetection', {
+      code: lambda.DockerImageCode.fromImageAsset('lambda', {
+        file: 'text_detection/Dockerfile',
+        platform: cdk.aws_ecr_assets.Platform.LINUX_AMD64,
+      }),
       role: this.textDetectionRole,
       timeout: cdk.Duration.minutes(5),
       memorySize: 1024,
@@ -206,10 +209,12 @@ export class ProcessingConstruct extends Construct {
       ...commonLambdaConfig,
     });
 
-    // Notes Processor Lambda Function
-    this.notesProcessor = createPythonLambdaWithShared('NotesProcessor', 'lambda/notes_processor', sharedFileMapping['notes_processor'], {
-      index: 'index.py',
-      handler: 'lambda_handler',
+    // Notes Processor Lambda Function (Container-based for OpenCV + pytesseract on Python 3.13)
+    this.notesProcessor = new lambda.DockerImageFunction(this, 'NotesProcessor', {
+      code: lambda.DockerImageCode.fromImageAsset('lambda', {
+        file: 'notes_processor/Dockerfile',
+        platform: cdk.aws_ecr_assets.Platform.LINUX_AMD64,
+      }),
       role: this.notesProcessorRole,
       timeout: cdk.Duration.minutes(10),
       memorySize: 2048, // Higher memory for image processing
