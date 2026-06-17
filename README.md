@@ -167,7 +167,7 @@ Note that these prices vary over time, these estimates are based on pricing at t
    # Upload image to input bucket
    aws s3 cp your-pnid.png s3://your-input-bucket/
 
-   # Or manually execute Step Functions
+   # Manually execute Step Functions
    aws stepfunctions start-execution \
      --state-machine-arn <your-state-machine-arn> \
      --input '{"image_key": "your-pnid.png", "input_bucket": "your-input-bucket", "processing_config": {}}'
