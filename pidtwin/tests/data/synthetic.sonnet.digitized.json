@@ -1,0 +1,806 @@
+{
+  "drawing": {
+    "number": "PID-1001",
+    "revision": "B",
+    "title": "PROCESS FEED SYSTEM"
+  },
+  "equipment": [
+    {
+      "id": "V-101",
+      "tag": "V-101",
+      "type": "vessel",
+      "description": "SURGE DRUM",
+      "bbox": [
+        773.0,
+        246.0,
+        855.0,
+        677.0
+      ]
+    },
+    {
+      "id": "T-101",
+      "tag": "T-101",
+      "type": "tank",
+      "description": "FEED TANK",
+      "bbox": [
+        50.0,
+        262.0,
+        150.0,
+        615.0
+      ]
+    },
+    {
+      "id": "E-101",
+      "tag": "E-101",
+      "type": "heat exchanger",
+      "description": null,
+      "bbox": [
+        591.0,
+        362.0,
+        645.0,
+        438.0
+      ]
+    },
+    {
+      "id": "P-101",
+      "tag": "P-101",
+      "type": "pump",
+      "description": null,
+      "bbox": [
+        263.0,
+        538.0,
+        300.0,
+        608.0
+      ]
+    }
+  ],
+  "valves": [
+    {
+      "id": "FCV-101",
+      "tag": "FCV-101",
+      "type": "control valve",
+      "bbox": [
+        481.99999999999994,
+        358.0,
+        499.0,
+        409.0
+      ]
+    },
+    {
+      "id": "PSV-101",
+      "tag": "PSV-101",
+      "type": "pressure safety valve",
+      "bbox": [
+        805.0,
+        162.0,
+        822.0,
+        202.0
+      ]
+    },
+    {
+      "id": "HV-101",
+      "tag": "HV-101",
+      "type": "gate valve",
+      "bbox": [
+        187.0,
+        529.0,
+        204.0,
+        549.0
+      ]
+    },
+    {
+      "id": "CV-101",
+      "tag": "CV-101",
+      "type": "check valve",
+      "bbox": [
+        345.0,
+        391.0,
+        362.0,
+        409.0
+      ]
+    }
+  ],
+  "instruments": [
+    {
+      "id": "PT-101",
+      "tag": "PT-101",
+      "function": "pressure transmitter",
+      "text": null,
+      "bbox": [
+        741.0,
+        148.0,
+        773.0,
+        200.0
+      ]
+    },
+    {
+      "id": "FIC-101",
+      "tag": "FIC-101",
+      "function": "flow indicator controller",
+      "text": null,
+      "bbox": [
+        455.0,
+        228.99999999999997,
+        486.00000000000006,
+        281.0
+      ]
+    },
+    {
+      "id": "LT-101",
+      "tag": "LT-101",
+      "function": "level transmitter",
+      "text": null,
+      "bbox": [
+        182.0,
+        344.0,
+        213.0,
+        396.00000000000006
+      ]
+    },
+    {
+      "id": "LIC-101",
+      "tag": "LIC-101",
+      "function": "level indicator controller",
+      "text": null,
+      "bbox": [
+        182.0,
+        260.0,
+        213.0,
+        312.0
+      ]
+    },
+    {
+      "id": "LG-101",
+      "tag": "LG-101",
+      "function": "level gauge",
+      "text": null,
+      "bbox": [
+        886.0,
+        321.0,
+        917.0,
+        373.0
+      ]
+    },
+    {
+      "id": "PI-101",
+      "tag": "PI-101",
+      "function": "pressure indicator",
+      "text": null,
+      "bbox": [
+        266.0,
+        272.0,
+        297.0,
+        323.0
+      ]
+    },
+    {
+      "id": "FT-101",
+      "tag": "FT-101",
+      "function": "flow transmitter",
+      "text": null,
+      "bbox": [
+        403.0,
+        287.0,
+        434.0,
+        338.0
+      ]
+    },
+    {
+      "id": "TT-101",
+      "tag": "TT-101",
+      "function": "temperature transmitter",
+      "text": null,
+      "bbox": [
+        666.0,
+        287.0,
+        697.0,
+        338.0
+      ]
+    },
+    {
+      "id": "TIC-101",
+      "tag": "TIC-101",
+      "function": "temperature indicator controller",
+      "text": null,
+      "bbox": [
+        718.0,
+        287.0,
+        749.0,
+        338.0
+      ]
+    }
+  ],
+  "fittings": [],
+  "offpage": [
+    {
+      "label": "OP2",
+      "text": "CONDENSATE",
+      "bbox": [
+        593.0,
+        508.0,
+        643.0,
+        520.0
+      ]
+    },
+    {
+      "label": "OP3",
+      "text": "TO UNIT 200",
+      "bbox": [
+        901.0,
+        765.0,
+        943.9999999999999,
+        778.0
+      ]
+    },
+    {
+      "label": "OP1",
+      "text": "STEAM",
+      "bbox": [
+        606.0,
+        288.0,
+        631.0,
+        301.0
+      ]
+    }
+  ],
+  "lines": [
+    {
+      "line_number": "2\"-P-1004-SS",
+      "bbox": [
+        827.0,
+        746.0,
+        873.0,
+        759.0
+      ],
+      "id": "L4"
+    },
+    {
+      "line_number": "4\"-P-1001-CS",
+      "bbox": [
+        205.0,
+        515.0,
+        250.0,
+        528.0
+      ],
+      "id": "L3"
+    },
+    {
+      "line_number": "3\"-P-1002-CS",
+      "bbox": [
+        286.0,
+        377.0,
+        332.0,
+        389.0
+      ],
+      "id": "L1"
+    },
+    {
+      "line_number": "3\"-P-1003-SS",
+      "bbox": [
+        686.0,
+        377.0,
+        732.0,
+        389.0
+      ],
+      "id": "L2"
+    }
+  ],
+  "runs": [
+    {
+      "id": "R1",
+      "kind": "process",
+      "line_number": "4\"-P-1001-CS",
+      "items": [
+        "T-101",
+        "HV-101",
+        "P-101"
+      ],
+      "path": [
+        [
+          150,
+          538
+        ],
+        [
+          195,
+          538
+        ],
+        [
+          255,
+          538
+        ],
+        [
+          255,
+          569
+        ],
+        [
+          264,
+          569
+        ]
+      ]
+    },
+    {
+      "id": "R2",
+      "kind": "process",
+      "line_number": "3\"-P-1002-CS",
+      "items": [
+        "P-101",
+        "CV-101",
+        "FCV-101",
+        "E-101"
+      ],
+      "path": [
+        [
+          282,
+          538
+        ],
+        [
+          282,
+          400
+        ],
+        [
+          354,
+          400
+        ],
+        [
+          418,
+          400
+        ],
+        [
+          490,
+          400
+        ],
+        [
+          591,
+          400
+        ]
+      ]
+    },
+    {
+      "id": "R3",
+      "kind": "process",
+      "line_number": "3\"-P-1003-SS",
+      "items": [
+        "E-101",
+        "V-101"
+      ],
+      "path": [
+        [
+          645,
+          400
+        ],
+        [
+          682,
+          400
+        ],
+        [
+          773,
+          400
+        ]
+      ]
+    },
+    {
+      "id": "R4",
+      "kind": "process",
+      "line_number": "2\"-P-1004-SS",
+      "items": [
+        "V-101",
+        "OP3"
+      ],
+      "path": [
+        [
+          814,
+          677
+        ],
+        [
+          814,
+          769
+        ],
+        [
+          891,
+          769
+        ]
+      ]
+    },
+    {
+      "id": "R5",
+      "kind": "process",
+      "line_number": null,
+      "items": [
+        "OP1",
+        "E-101"
+      ],
+      "path": [
+        [
+          618,
+          308
+        ],
+        [
+          618,
+          362
+        ]
+      ]
+    },
+    {
+      "id": "R6",
+      "kind": "process",
+      "line_number": null,
+      "items": [
+        "E-101",
+        "OP2"
+      ],
+      "path": [
+        [
+          618,
+          438
+        ],
+        [
+          618,
+          492
+        ]
+      ]
+    },
+    {
+      "id": "R7",
+      "kind": "impulse",
+      "line_number": null,
+      "items": [
+        "PI-101",
+        "R2"
+      ],
+      "path": [
+        [
+          282,
+          323
+        ],
+        [
+          282,
+          400
+        ]
+      ]
+    },
+    {
+      "id": "R8",
+      "kind": "impulse",
+      "line_number": null,
+      "items": [
+        "FT-101",
+        "R2"
+      ],
+      "path": [
+        [
+          418,
+          338
+        ],
+        [
+          418,
+          400
+        ]
+      ]
+    },
+    {
+      "id": "R9",
+      "kind": "impulse",
+      "line_number": null,
+      "items": [
+        "TT-101",
+        "R3"
+      ],
+      "path": [
+        [
+          682,
+          338
+        ],
+        [
+          682,
+          400
+        ]
+      ]
+    },
+    {
+      "id": "R10",
+      "kind": "impulse",
+      "line_number": null,
+      "items": [
+        "PT-101",
+        "V-101"
+      ],
+      "path": [
+        [
+          757,
+          200
+        ],
+        [
+          757,
+          292
+        ],
+        [
+          773,
+          292
+        ]
+      ]
+    },
+    {
+      "id": "R11",
+      "kind": "impulse",
+      "line_number": null,
+      "items": [
+        "PSV-101",
+        "V-101"
+      ],
+      "path": [
+        [
+          814,
+          202
+        ],
+        [
+          814,
+          246
+        ]
+      ]
+    },
+    {
+      "id": "R12",
+      "kind": "impulse",
+      "line_number": null,
+      "items": [
+        "V-101",
+        "LG-101"
+      ],
+      "path": [
+        [
+          855,
+          346
+        ],
+        [
+          886,
+          346
+        ]
+      ]
+    },
+    {
+      "id": "R13",
+      "kind": "impulse",
+      "line_number": null,
+      "items": [
+        "T-101",
+        "LT-101"
+      ],
+      "path": [
+        [
+          150,
+          369
+        ],
+        [
+          182,
+          369
+        ]
+      ]
+    },
+    {
+      "id": "R14",
+      "kind": "signal",
+      "line_number": null,
+      "items": [
+        "LT-101",
+        "LIC-101"
+      ],
+      "path": [
+        [
+          197,
+          344
+        ],
+        [
+          197,
+          312
+        ]
+      ]
+    },
+    {
+      "id": "R15",
+      "kind": "signal",
+      "line_number": null,
+      "items": [
+        "FT-101",
+        "FIC-101"
+      ],
+      "path": [
+        [
+          434,
+          312
+        ],
+        [
+          455,
+          312
+        ],
+        [
+          455,
+          264
+        ]
+      ]
+    },
+    {
+      "id": "R16",
+      "kind": "signal",
+      "line_number": null,
+      "items": [
+        "FIC-101",
+        "FCV-101"
+      ],
+      "path": [
+        [
+          490,
+          252
+        ],
+        [
+          490,
+          358
+        ]
+      ]
+    },
+    {
+      "id": "R17",
+      "kind": "signal",
+      "line_number": null,
+      "items": [
+        "TT-101",
+        "TIC-101"
+      ],
+      "path": [
+        [
+          698,
+          313
+        ],
+        [
+          718,
+          313
+        ]
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "T-101",
+      "to": "HV-101",
+      "kind": "process",
+      "run": "R1"
+    },
+    {
+      "from": "HV-101",
+      "to": "P-101",
+      "kind": "process",
+      "run": "R1"
+    },
+    {
+      "from": "P-101",
+      "to": "CV-101",
+      "kind": "process",
+      "run": "R2"
+    },
+    {
+      "from": "CV-101",
+      "to": "FCV-101",
+      "kind": "process",
+      "run": "R2"
+    },
+    {
+      "from": "FCV-101",
+      "to": "E-101",
+      "kind": "process",
+      "run": "R2"
+    },
+    {
+      "from": "E-101",
+      "to": "V-101",
+      "kind": "process",
+      "run": "R3"
+    },
+    {
+      "from": "V-101",
+      "to": "OP3",
+      "kind": "process",
+      "run": "R4"
+    },
+    {
+      "from": "OP1",
+      "to": "E-101",
+      "kind": "process",
+      "run": "R5"
+    },
+    {
+      "from": "E-101",
+      "to": "OP2",
+      "kind": "process",
+      "run": "R6"
+    },
+    {
+      "from": "PI-101",
+      "to": "P-101",
+      "kind": "impulse",
+      "run": "R7"
+    },
+    {
+      "from": "FT-101",
+      "to": "CV-101",
+      "kind": "impulse",
+      "run": "R8"
+    },
+    {
+      "from": "TT-101",
+      "to": "E-101",
+      "kind": "impulse",
+      "run": "R9"
+    },
+    {
+      "from": "PT-101",
+      "to": "V-101",
+      "kind": "impulse",
+      "run": "R10"
+    },
+    {
+      "from": "PSV-101",
+      "to": "V-101",
+      "kind": "impulse",
+      "run": "R11"
+    },
+    {
+      "from": "V-101",
+      "to": "LG-101",
+      "kind": "impulse",
+      "run": "R12"
+    },
+    {
+      "from": "T-101",
+      "to": "LT-101",
+      "kind": "impulse",
+      "run": "R13"
+    },
+    {
+      "from": "LT-101",
+      "to": "LIC-101",
+      "kind": "signal",
+      "run": "R14"
+    },
+    {
+      "from": "FT-101",
+      "to": "FIC-101",
+      "kind": "signal",
+      "run": "R15"
+    },
+    {
+      "from": "FIC-101",
+      "to": "FCV-101",
+      "kind": "signal",
+      "run": "R16"
+    },
+    {
+      "from": "TT-101",
+      "to": "TIC-101",
+      "kind": "signal",
+      "run": "R17"
+    }
+  ],
+  "_image": {
+    "path": "samples/synthetic_pid_1001.png",
+    "size": [
+      2200,
+      1300
+    ]
+  },
+  "_pipeline": {
+    "tiles": 1,
+    "raw_detections": 24,
+    "items": 24,
+    "runs": 17,
+    "review": {
+      "views": 3,
+      "added": 0,
+      "updated": 0,
+      "deleted": 0,
+      "runs_added": 0,
+      "runs_updated": 0,
+      "runs_deleted": 0,
+      "finished": true,
+      "summary": "I swept the whole sheet in three zoomed windows and compared every item box and run path with the drawing. I found nothing to fix, so I made no edits. All the symbols, tags, line labels and off-page items are present and match the drawing. The runs follow the drawn lines, and both ends of each run are set."
+    }
+  }
+}

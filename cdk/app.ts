@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import * as cdk from "aws-cdk-lib";
+import { loadConfig } from "./lib/config";
+import { PNIDNetworkStack } from "./lib/network-stack";
 import { PNIDDigitizationStack } from "./lib/pnid-digitization-stack";
 import { AwsSolutionsChecks } from "cdk-nag";
 import { PrototypeSecurityNagPack } from "./lib/prototype-security";
@@ -24,12 +26,19 @@ if (env.account === "<YOUR-AWS-ACCOUNT-ID>") {
   process.exit(1);
 }
 
-// Create the main digitization stack with flexible naming
+// Two stacks: the network (deleted last, see lib/network-stack.ts) and the application
 const stackName = process.env.CDK_STACK_NAME || "PNIDDigitization";
+const config = loadConfig();
+const network = new PNIDNetworkStack(app, `${stackName}-Network`, config, {
+  env,
+  description: "SO9623 - Agentic P&ID digitization: VPC, subnets and VPC endpoints",
+});
 new PNIDDigitizationStack(app, stackName, {
   env,
   description:
-    "SO9623 - P&ID Digitization Pipeline with ML Symbol Detection and Line Detection",
+    "SO9623 - Agentic P&ID digitization with Amazon Bedrock and Bedrock AgentCore",
+  config,
+  networking: network.networking,
 });
 
 // Apply CDK Nag checks at the app level with verbose reporting

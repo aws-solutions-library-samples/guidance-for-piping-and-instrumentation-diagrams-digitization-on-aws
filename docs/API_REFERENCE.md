@@ -1,584 +1,249 @@
 # API Reference
 
-This document provides detailed technical reference for the P&ID Digitization Pipeline Lambda functions, data formats, and S3 organization.
+This page covers:
 
-## Lambda Functions
+- what you pass to the workflow;
+- what each step passes to the next;
+- what ends up in S3.
 
-### InputValidator
-**Function Name**: `InputValidator`  
-**Runtime**: Python 3.13  
-**Purpose**: Validates uploaded files and initializes processing configuration
+All coordinates on a sheet are normalized to 0–1000 on both axes, with (0, 0) at the top-left
+corner.
 
-#### Input
-```json
-{
-  "image_key": "diagrams/pnid-001.png",
-  "input_bucket": "my-input-bucket",
-  "processing_config": {
-    // Optional processing parameters
-  }
-}
-```
+## Workflow input
 
-#### Output
-```json
-{
-  "statusCode": 200,
-  "validated_image": {
-    "key": "diagrams/pnid-001.png",
-    "bucket": "my-input-bucket",
-    "size": 2048576,
-    "format": "PNG"
-  },
-  "processing_config": {
-    // Validated and merged configuration
-  },
-  "execution_id": "exec-20250108-150426-abc123"
-}
-```
-
-### NotesProcessor
-**Function Name**: `NotesProcessor`  
-**Runtime**: Python 3.13  
-**Purpose**: Removes notes sections and frames from P&ID diagrams
-
-#### Input
-```json
-{
-  "image_key": "diagrams/pnid-001.png",
-  "input_bucket": "my-input-bucket",
-  "processing_config": {
-    "notes_processing": {
-      "manual_coordinates": {
-        "x": 100, "y": 50, "width": 800, "height": 600
-      },
-      "remove_notes_section": true,
-      "frame_config": {
-        "remove_frame": true
-      }
-    }
-  }
-}
-```
-
-#### Output
-```json
-{
-  "statusCode": 200,
-  "processing_mode": "auto",
-  "processed_key": "exec-20250108-150426-abc123/notes-processing/processed_image.png",
-  "processed_bucket": "my-output-bucket",
-  "original_image_dimensions": {"width": 1920, "height": 1080},
-  "processed_image_dimensions": {"width": 1800, "height": 1000},
-  "notes_coordinates": {
-    "x": 1800, "y": 0, "width": 120, "height": 1080,
-    "confidence": 0.95, "method_used": "automatic_detection"
-  },
-  "frame_info": {
-    "frame_detected": true,
-    "frame_removed": true,
-    "frame_bounds": {"left": 10, "top": 10, "right": 10, "bottom": 10}
-  }
-}
-```
-
-### TextDetection
-**Function Name**: `TextDetection`  
-**Runtime**: Python 3.13  
-**Purpose**: Extracts text elements using Amazon Bedrock Data Automation
-
-#### Input
-```json
-{
-  "image_key": "diagrams/pnid-001.png",
-  "input_bucket": "my-input-bucket",
-  "processing_config": {
-    "text_detection": {
-      "timeout_seconds": 300,
-      "max_retries": 3
-    }
-  }
-}
-```
-
-#### Output
-```json
-{
-  "statusCode": 200,
-  "s3_results": {
-    "bucket": "my-output-bucket",
-    "text_detection_results_key": "exec-20250108-150426-abc123/text-detection/text_detection_results.json",
-    "debug_image_key": "exec-20250108-150426-abc123/text-detection/debug_image.png"
-  },
-  "summary": {
-    "text_elements_count": 45,
-    "bda_job_id": "bda-job-12345",
-    "execution_id": "exec-20250108-150426-abc123",
-    "coordinates_in_original_space": true,
-    "debug_image_generated": true
-  }
-}
-```
-
-### SymbolDetection
-**Function Name**: `SymbolDetection`  
-**Runtime**: Python 3.13  
-**Purpose**: Detects symbols using trained SageMaker model
-
-#### Input
-```json
-{
-  "image_key": "diagrams/pnid-001.png",
-  "input_bucket": "my-input-bucket",
-  "processing_config": {
-    "symbol_detection": {
-      "confidence_threshold": 0.9,
-      "nms_threshold": 0.4
-    }
-  }
-}
-```
-
-#### Output
-```json
-{
-  "statusCode": 200,
-  "s3_results": {
-    "bucket": "my-output-bucket",
-    "detections_key": "exec-20250108-150426-abc123/symbol-detection/detections.json",
-    "debug_image_labeled_key": "exec-20250108-150426-abc123/symbol-detection/debug_image_labeled.png",
-    "debug_image_boxes_key": "exec-20250108-150426-abc123/symbol-detection/debug_image_boxes.png",
-    "debug_image_key": "exec-20250108-150426-abc123/symbol-detection/debug_image_labeled.png"
-  },
-  "summary": {
-    "symbols_count": 23,
-    "confidence_threshold": 0.9,
-    "execution_id": "exec-20250108-150426-abc123",
-    "debug_images_generated": true
-  }
-}
-```
-
-### LineDetection
-**Function Name**: `LineDetection`  
-**Runtime**: Python 3.13 (Docker)  
-**Purpose**: Detects connecting lines using computer vision
-
-#### Input
-- Image location and bounding boxes from previous steps
-- Line detection configuration parameters
-
-#### Output
-```json
-{
-  "statusCode": 200,
-  "line_count": 156,
-  "intersection_count": 23,
-  "s3_results": {
-    "bucket": "my-output-bucket",
-    "lines_s3_key": "exec-20250108-150426-abc123/line-detection/lines.json"
-  },
-  "summary": {
-    "image_dimensions": [1800, 1000],
-    "processing_successful": true
-  }
-}
-```
-
-### GraphGenerator
-**Function Name**: `GraphGenerator`  
-**Runtime**: Python 3.13  
-**Purpose**: Creates structured graph from detected elements
-
-#### Input
-- Combined results from all previous processing steps
-- Graph generation configuration
-
-#### Output
-```json
-{
-  "statusCode": 200,
-  "s3_results": {
-    "bucket": "my-output-bucket",
-    "graph_data_s3_key": "exec-20250108-150426-abc123/graph/graph_data.json",
-    "dexpi_s3_key": "exec-20250108-150426-abc123/graph/dexpi_output.xml"
-  },
-  "graph_summary": {
-    "text_elements_count": 45,
-    "symbols_count": 23,
-    "lines_count": 156,
-    "total_nodes": 224,
-    "total_edges": 312,
-    "text_associations": 67,
-    "component_filtering": {
-      "filter_enabled": true,
-      "components_removed": 3,
-      "nodes_removed": 89
-    }
-  }
-}
-```
-
-### GraphVisualization
-**Function Name**: `GraphVisualization`  
-**Runtime**: Python 3.13 (Docker)  
-**Purpose**: Creates visualization outputs
-
-#### Input
-- Graph data from GraphGenerator
-- Visualization configuration
-
-#### Output
-```json
-{
-  "statusCode": 200,
-  "visualizations_generated": {
-    "physical_layout": "exec-20250108-150426-abc123/visualization/physical_layout.png",
-    "graph_representation": "exec-20250108-150426-abc123/visualization/graph_representation.png"
-  },
-  "message": "Successfully generated 2 visualizations",
-  "success": true
-}
-```
-
-## S3 File Organization
-
-The system uses a 3-bucket architecture for organized data separation:
-
-### Bucket Structure Overview
-- **Input Bucket**: `${stackName}-input-${account}-${region}` - Original P&ID uploads
-- **Output Bucket**: `${stackName}-output-${account}-${region}` - All processing results and execution data  
-- **Model Artifacts Bucket**: `${stackName}-artifacts-${account}-${region}` - SageMaker model files
-
-### Execution-Based File Organization
-All processing results are organized by execution ID directly in the output bucket:
-
-```
-s3://input-bucket/
-└── diagrams/
-    ├── pnid-001.png                          # Original uploaded diagrams
-    ├── pnid-002.jpg
-    └── pnid-003.pdf
-
-s3://output-bucket/
-└── exec-20250108-150426-abc123/              # Step Functions execution ID
-    ├── config/
-    │   └── processing_config.json            # Validated processing configuration
-    ├── input/
-    │   └── pnid-001.png                      # Copy of input file for reference  
-    ├── notes-processing/
-    │   ├── processed_image.png               # Image after notes/frame removal
-    │   └── notes_metadata.json              # Notes processing metadata
-    ├── text-detection/
-    │   ├── text_detection_results.json      # Text elements with coordinates
-    │   └── bda_output/                       # Bedrock Data Automation outputs
-    │       └── [BDA generated files]
-    ├── symbol-detection/
-    │   └── detections.json                   # Symbol detection results
-    ├── line-detection/
-    │   ├── lines.json                        # Line segments and intersections
-    │   └── debug/                            # Debug images (if enabled)
-    │       ├── 00_original_with_boxes.jpg
-    │       ├── 01_after_symbol_clearing.jpg
-    │       ├── 02_after_text_clearing.jpg
-    │       ├── 03_after_grayscale.png
-    │       ├── 04_after_binary.png
-    │       ├── 05_before_thinning.png
-    │       ├── 06_after_thinning.png
-    │       ├── 06a_raw_hough_lines.jpg
-    │       ├── 06b_raw_hough_lines_binary.jpg
-    │       ├── 06c_raw_hough_lines_indexed.jpg
-    │       ├── 06d_raw_hough_lines.json
-    │       ├── 07_after_extension.jpg
-    │       ├── 08_after_merging.jpg
-    │       ├── 09_after_filtering.jpg
-    │       ├── 10_symbol_intersections.jpg
-    │       └── 11_final_processed.jpg
-    ├── graph/
-    │   ├── graph_data.json                   # Final graph structure
-    │   └── dexpi_output.xml                  # DEXPI format output
-    ├── visualization/
-    │   ├── physical_layout.png               # Physical layout visualization
-    │   └── graph_representation.png         # Graph network visualization
-    └── execution_metadata.json              # Execution metadata and paths
-
-s3://model-artifacts-bucket/
-└── model.tar.gz                              # SageMaker model artifacts
-```
-
-## Data Formats
-
-### Text Detection Results
-```json
-{
-  "text_elements": [
-    {
-      "text": "P-101",
-      "bounding_box": {
-        "x": 245.3, "y": 156.7,
-        "width": 45.2, "height": 18.5
-      }
-    }
-  ],
-  "image_dimensions": {"width": 1800, "height": 1000},
-  "bda_output_uri": "s3://bucket/bda-output/job-12345/",
-  "coordinate_processing": {
-    "coordinates_in_original_space": true,
-    "manual_coordinates": null,
-    "filtering_applied": false
-  }
-}
-```
-
-### Symbol Detection Results
-```json
-{
-  "detections": [
-    {
-      "bbox": [245.1, 156.3, 289.7, 198.9],
-      "class_id": "pump",
-      "class_name": "centrifugal_pump",
-      "score": 0.95,
-      "nearest_classes": ["pump.png", "centrifugal_pump.png"]
-    }
-  ],
-  "processing_metadata": {
-    "confidence_threshold": 0.9,
-    "nms_threshold": 0.4,
-    "model_version": "v2.1"
-  }
-}
-```
-
-### Line Detection Results
-```json
-{
-  "detected_lines": [
-    {
-      "startX": 0.245, "startY": 0.178,
-      "endX": 0.456, "endY": 0.178
-    }
-  ],
-  "symbol_intersections": [
-    {
-      "line_id": "line-45",
-      "symbol_id": "symbol-12",
-      "intersection_type": "endpoint",
-      "confidence": 0.87
-    }
-  ],
-  "processing_metadata": {
-    "coordinate_transformation": {
-      "applied": true,
-      "validation": {
-        "statistics": {"avg_deviation": 2.3}
-      }
-    }
-  }
-}
-```
-
-### Graph Data Structure
-```json
-{
-  "symbols": [
-    {
-      "id": "1",
-      "type": "pump",
-      "class_name": "centrifugal_pump",
-      "bbox": [245, 156, 290, 199],
-      "connections": ["line-45", "line-67"],
-      "text_associated": "P-101"
-    }
-  ],
-  "lines": [
-    {
-      "id": "45",
-      "points": [[245, 178], [456, 178]],
-      "text_associated": "4\" PIPE",
-      "connections": ["symbol-1", "junction-3"]
-    }
-  ],
-  "junctions": [
-    {
-      "id": "3",
-      "point": [456, 178],
-      "junction_type": "t_junction",
-      "connected_lines": ["45", "67", "89"],
-      "confidence": 0.92
-    }
-  ],
-  "connections": [
-    {"from": "symbol-1", "to": "line-45"},
-    {"from": "line-45", "to": "junction-3"}
-  ],
-  "text_elements": [
-    {
-      "id": "text-12",
-      "text": "P-101",
-      "association_type": "symbol",
-      "associated_with": "symbol-1",
-      "original_bbox": {"x": 245, "y": 140, "width": 30, "height": 12}
-    }
-  ],
-  "graph_stats": {
-    "num_nodes": 224,
-    "num_edges": 312,
-    "num_components": 1,
-    "num_junctions": 23
-  }
-}
-```
-
-### DEXPI Output Format
-The pipeline generates DEXPI-compliant XML output for integration with engineering software:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<PlantModel xmlns="http://www.dexpi.org/2017/dexpi">
-  <PlantInformation>
-    <Identification>pnid-001</Identification>
-    <CreationDateTime>2025-01-08T15:04:26Z</CreationDateTime>
-  </PlantInformation>
-  <PlantStructure>
-    <Equipment id="P-101" componentType="Pump">
-      <Position x="245" y="156"/>
-      <PipingConnections>
-        <Connection id="conn-1" to="line-45"/>
-      </PipingConnections>
-    </Equipment>
-    <PipingNetworkSegment id="line-45" 
-                          startPosition="245,178" 
-                          endPosition="456,178"/>
-  </PlantStructure>
-</PlantModel>
-```
-
-## Execution Path Management
-
-### ExecutionPathManager
-The system uses consistent execution-based paths for all file operations:
-
-```python
-from execution_paths import create_path_manager
-
-# Create path manager
-path_manager = create_path_manager(event, context, output_bucket)
-
-# Generate consistent S3 keys
-processed_image_key = path_manager.get_processed_image_s3_key()
-# Returns: "exec-20250108-150426-abc123/notes-processing/processed_image.png"
-
-text_results_key = path_manager.get_text_detection_results_s3_key()
-# Returns: "exec-20250108-150426-abc123/text-detection/text_detection_results.json"
-
-graph_data_key = path_manager.get_graph_data_s3_key()
-# Returns: "exec-20250108-150426-abc123/graph/graph_data.json"
-```
-
-### Path Structure Methods
-- `get_execution_prefix()` - Base execution directory
-- `get_processed_image_s3_key()` - Processed image location
-- `get_text_detection_results_s3_key()` - Text detection results
-- `get_line_detection_results_s3_key()` - Line detection results
-- `get_graph_data_s3_key()` - Graph data location
-- `get_dexpi_s3_key()` - DEXPI output location
-- `get_visualization_path()` - Visualization directory
-
-## Error Responses
-
-### Standard Error Format
-All Lambda functions return consistent error responses:
+Start the state machine with:
 
 ```json
 {
-  "statusCode": 500,
-  "success": false,
-  "error": "Configuration validation failed: threshold must be integer",
-  "source_bucket": "my-input-bucket",
-  "source_key": "diagrams/pnid-001.png",
-  "execution_id": "exec-20250108-150426-abc123",
-  "timestamp": "2025-01-08T15:04:26.123Z"
+  "bucket": "<InputBucketName>",
+  "key": "drawings/area-7.pdf",
+  "config": { "modelId": "us.openai.gpt-6.1-sol" }
 }
 ```
 
-### Common Error Types
+| Field | Required | Meaning |
+|---|---|---|
+| `bucket` | yes | The stack's input bucket. Other buckets are rejected. |
+| `key` | yes | Object key of a `.pdf`, `.png`, `.jpg`/`.jpeg`, `.tif`/`.tiff` or `.webp` file. |
+| `config` | no | Per-run overrides of the `digitization` settings. See [Configuration](CONFIGURATION.md#per-run-settings). |
 
-#### Validation Errors (400)
-- Invalid configuration parameters
-- Missing required fields
-- Invalid coordinate values
+The upload trigger starts runs with `{"bucket", "key", "trigger": "upload"}` and no `config`.
 
-#### Processing Errors (500)
-- Image processing failures
-- Model inference errors
-- S3 access issues
+## Workflow states
 
-#### Timeout Errors (504)
-- Long-running operations exceed timeout
-- Bedrock Data Automation timeout
-- SageMaker endpoint timeout
+| State | Type | Does |
+|---|---|---|
+| `SupportedFile?` | Choice | Uploads (`"trigger": "upload"`, set by the upload rule) whose key does not end in a supported extension go to `IgnoredUpload` and end. Manual starts always continue. |
+| `DefaultConfig`, `MergeInput` | Pass | Add `"config": {}` when the input has none. |
+| `PrepareInput` | Lambda | Validate the input and config, write `pages/` and `input.json`, return the page list. |
+| `Sheets` | Map | For each page, run `DigitizeSheet`, up to `maxConcurrentSheets` at a time. |
+| `DigitizeSheet` | Lambda, `.waitForTaskToken` | Start an AgentCore session, then wait for its callback (heartbeat 300 s, timeout `sheetTimeoutMinutes`). |
+| `SheetFailed` | Pass | Turn a failed sheet into `{"status": "FAILED", "sheetId", "error", "cause"}` so the other sheets continue. |
+| `MergeSheets` | Lambda | Write the plant graph and `summary.json`. |
+| `AllSheetsDone?` | Choice | Succeed if every sheet succeeded. Otherwise fail with `SheetsFailed`; the outputs of the good sheets are still written. |
 
-## Integration Examples
+`DigitizeSheet` is retried on a new session twice, starting after 1 minute and backing off ×2,
+for these errors: `States.HeartbeatTimeout`, `ThrottlingException`, `ModelThrottledException`,
+`ServiceUnavailableException`, `ModelNotReadyException`, `ModelErrorException` and
+`InternalServerException`. A retry reuses the `detect.json` and `trace.json` already written for
+the sheet.
 
-### Step Functions Integration
+## PrepareInput (Lambda)
+
+Input, as built by the state machine:
+
+```json
+{ "bucket": "...", "key": "...", "config": { }, "executionName": "<execution name>" }
+```
+
+Output:
+
 ```json
 {
-  "Comment": "P&ID Processing Pipeline",
-  "StartAt": "InputValidator",
-  "States": {
-    "InputValidator": {
-      "Type": "Task",
-      "Resource": "arn:aws:lambda:region:account:function:InputValidator",
-      "ResultPath": "$.validation_result",
-      "Next": "NotesProcessor"
-    },
-    "NotesProcessor": {
-      "Type": "Task", 
-      "Resource": "arn:aws:lambda:region:account:function:NotesProcessor",
-      "ResultPath": "$.notes_processing_results",
-      "Next": "ParallelProcessing"
-    }
-  }
+  "bucket": "<OutputBucketName>",
+  "prefix": "<execution name>/",
+  "source": { "bucket": "...", "key": "drawings/area-7.pdf", "versionId": "..." },
+  "config": { "modelId": "...", "review": { "enabled": true, "maxViews": 40 },
+              "dashedAsPiping": false, "pdf": { "dpi": 300, "maxPages": 50 } },
+  "pages": [ { "sheetId": "area-7.p1", "pageKey": "<execution name>/pages/area-7.p1.png",
+               "outputPrefix": "<execution name>/sheets/area-7.p1/" } ]
 }
 ```
 
-### Direct Lambda Invocation
-```python
-import boto3
+Sheet IDs come from the file name. A multi-page PDF gets `.p1`, `.p2`, … suffixes. Validation
+errors are raised as `InputError` and are not retried.
 
-lambda_client = boto3.client('lambda')
+## DispatchSheet (Lambda) and the agent payload
 
-# Invoke InputValidator
-response = lambda_client.invoke(
-    FunctionName='InputValidator',
-    Payload=json.dumps({
-        "image_key": "diagrams/pnid-001.png",
-        "input_bucket": "my-input-bucket",
-        "processing_config": {}
-    })
-)
+DispatchSheet receives the task token, the execution ARN, the retry count, the bucket, one page
+and the config. It calls `InvokeAgentRuntime` with a session ID derived from
+(execution, sheet, retry count). It then passes this payload to the agent:
 
-result = json.loads(response['Payload'].read())
-```
-
-### S3 Event Integration
-```python
-# Example S3 event trigger (if enabled)
+```json
 {
-  "Records": [
-    {
-      "eventVersion": "2.1",
-      "eventSource": "aws:s3",
-      "eventName": "ObjectCreated:Put",
-      "s3": {
-        "bucket": {"name": "my-input-bucket"},
-        "object": {"key": "diagrams/pnid-001.png"}
-      }
-    }
-  ]
+  "bucket": "<OutputBucketName>",
+  "pageKey": "<execution name>/pages/area-7.p1.png",
+  "outputPrefix": "<execution name>/sheets/area-7.p1/",
+  "sheetId": "area-7.p1",
+  "config": { "modelId": "...", "review": { "enabled": true, "maxViews": 40 }, "dashedAsPiping": false },
+  "taskToken": "..."
 }
 ```
 
-For deployment and infrastructure details, see the main [README.md](../README.md).
-For troubleshooting specific API issues, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+The agent ([`cdk/agent/main.py`](../cdk/agent/main.py)) answers `{"status": "accepted"}` at once,
+digitizes in a background thread, and sends `SendTaskHeartbeat` every 60 seconds. When it
+finishes, it calls `SendTaskSuccess` with the sheet summary:
+
+```json
+{
+  "status": "SUCCEEDED",
+  "sheet_id": "area-7.p1",
+  "outputPrefix": "<execution name>/sheets/area-7.p1/",
+  "drawing": { "number": "...", "revision": "...", "title": "..." },
+  "counts": { "equipment": 6, "valves": 42, "instruments": 17, "fittings": 31, "offpage": 9,
+              "lines": 11, "runs": 64, "connections": 151 },
+  "graph": { "nodes": 412, "edges": 431 },
+  "issues": { "warning:valve_degree": 2 },
+  "usage": { "inputTokens": 10208, "outputTokens": 22226, "cacheWriteInputTokens": 336272, "cacheReadInputTokens": 410269 },
+  "seconds": 350, "usd": 1.24, "model_id": "us.openai.gpt-6.1-sol",
+  "review": { "views": 31, "added": 4, "updated": 9, "deleted": 1, "runs_added": 3, "runs_updated": 6,
+              "runs_deleted": 0, "finished": true, "summary": "..." }
+}
+```
+
+On any exception, the agent calls `SendTaskFailure` instead. The error is the exception class name,
+for example `ThrottlingException`, and the cause is its message.
+
+## MergeSheets (Lambda)
+
+Input: `{"bucket", "prefix", "source", "config", "results": [<one entry per page>]}`.
+Output: `{"status": "SUCCEEDED" | "PARTIAL" | "FAILED", "sheets": {"total", "succeeded"}, "usd",
+"outputs": {"graph", "issues", "dexpi", "dot", "summary"}}`.
+
+## Output files
+
+### `sheets/<sheet>/sheet.json`: digitized sheet
+
+```json
+{
+  "drawing": { "number": "PID-1001", "revision": "B", "title": "..." },
+  "equipment":   [ { "id": "T-101", "tag": "T-101", "type": "tank", "description": null, "bbox": [x0, y0, x1, y1] } ],
+  "valves":      [ { "id": "HV-101", "tag": "HV-101", "type": "gate valve", "bbox": [...] } ],
+  "instruments": [ { "id": "FT-101", "tag": "FT-101", "function": "ISA bubble", "text": null, "bbox": [...] } ],
+  "fittings":    [ { "id": "F3", "type": "blind flange", "text": "6\"", "bbox": [...] } ],
+  "offpage":     [ { "label": "OP1", "text": "TO UNIT 200", "bbox": [...] } ],
+  "lines":       [ { "id": "L2", "line_number": "6\"-DW-1865", "bbox": [...] } ],
+  "runs": [ { "id": "R1", "kind": "process", "line_number": "6\"-DW-1865",
+              "items": ["T-101", "HV-101", "F3", "OP1"], "path": [[x, y], ...] } ],
+  "connections": [ { "from": "T-101", "to": "HV-101", "kind": "process", "run": "R1" } ],
+  "_usage": { "inputTokens": 0, "outputTokens": 0, "seconds": 0, "usd": 0.0, "model_id": "..." },
+  "_pipeline": { "tiles": 6, "raw_detections": 212, "items": 180, "runs": 64, "review": { } }
+}
+```
+
+- **Runs** are the traced lines. Each one lists the item ids it passes, in order.
+- **End of a run.** A run can end at an item id, at another run's id (a tee into that run), or at
+  `"END"` (a bare line end).
+- **`kind`** is `process` for piping, `signal` for dashed signal lines, and `impulse` for
+  instrument tubing.
+- **Connections** are derived from the runs.
+
+### `graph.json` and `plant.graph.json`: plant graph
+
+The schema is defined by the pydantic models in
+[`pidtwin/src/pidtwin/graph/schema.py`](../pidtwin/src/pidtwin/graph/schema.py):
+
+```json
+{
+  "schema_version": "1.0",
+  "source": "pid",
+  "sheets": [ { "id": "area-7.p1", "number": "PID-1001", "title": "...", "image": "s3://..." } ],
+  "nodes": [ { "id": "HV-101", "category": "valve", "dexpi_class": "GateValve", "type": "gate valve",
+               "tag": "HV-101", "sheet": "area-7.p1", "bbox": [...] },
+             { "id": "P4", "category": "pipe", "dexpi_class": "PipingNetworkSegment",
+               "line_number": "6\"-DW-1865", "nominal_size": "6\"", "service": "DW", "attrs": { "run": "R1" } } ],
+  "edges": [ { "src": "HV-101", "dst": "P4", "kind": "process", "run": "R1" } ],
+  "warnings": [ "R7: signal run carries line number 2\"-D-5 - treated as piping" ]
+}
+```
+
+The graph follows one convention throughout:
+
+- **Nodes are physical items.** The categories are `equipment`, `valve`, `instrument`, `fitting`,
+  `offpage`, `tee`, `end` and `pipe`.
+- **Pipes are cut at items and tees.** A `pipe` node runs between two neighbouring non-pipe nodes,
+  so every run is cut at each inline item and at each tee.
+- **Edges are direct contact.** Edge `kind` is `process` (piping), `impulse` (instrument tubing) or
+  `signal` (information only).
+- **Pipe attributes come from the line number.** `line_number`, `nominal_size` and `service` are
+  parsed from line numbers such as `6"-DW-1865`.
+- **DEXPI classes.** `dexpi_class` uses DEXPI 1.3 names, chosen by keyword from the model's
+  free-text `type`. Classes starting with `Custom` mean the kind was not recognized.
+- **Node ids in the plant graph.** Ids are prefixed with `<sheet>/`. Equipment drawn on several
+  sheets with the same tag becomes one node. Off-page connectors are paired across sheets when
+  their pipes carry the same line number, or when one connector's text names the other sheet.
+
+### `issues.json` and `plant.issues.json`: rule violations
+
+```json
+[ { "level": "warning", "code": "valve_degree", "node": "HV-104",
+    "message": "valve HV-104 has 1 process connections (expected 2: one in, one out)" } ]
+```
+
+| Code | What it flags |
+|---|---|
+| `isolated` | An item with no connections |
+| `dangling_pipe` | A pipe segment without exactly 2 connections |
+| `valve_degree` | A valve without exactly 2 process connections |
+| `tee_degree` | A tee with fewer than 3 connections |
+| `equipment_unpiped` | Equipment with no piping connection |
+| `offpage_target` | An off-page connector without destination text |
+| `tag_pattern` | A tag that does not look like a valve or instrument tag |
+| `duplicate_tag` | A valve or instrument tag that appears more than once |
+| `multiple_line_numbers` | A run with several different line-number labels along it, which may be two lines |
+| `unknown_node` | An edge that refers to a missing node |
+| `open_ends` (info) | The number of line ends without a symbol |
+
+The same rules run on the draft before review, and their findings are given to the review agent as
+hints.
+
+### `dexpi.xml` and `plant.dexpi.xml`
+
+The export is DEXPI-style Proteus XML. It uses DEXPI 1.3 class names and the Proteus 4 element
+layout, and contains:
+
+- Equipment, with one Nozzle per piping connection;
+- one PipingNetworkSystem per line number, holding PipingNetworkSegments, which are chains of pipes
+  and inline components between two terminals;
+- one ProcessInstrumentationFunction per instrument;
+- one InformationFlow per signal edge.
+
+Geometry is not written. The file has not been validated against the DEXPI XSD, so check it with
+your target tool.
+
+### `graph.dot` and `plant.dot`
+
+The topology as a Graphviz file, with pipes drawn as labelled edges. Render it with
+`dot -Tsvg graph.dot -o graph.svg`.
+
+### `overlay.png`
+
+The sheet, scaled to at most 4096 px on its long edge, with the final result drawn on top:
+
+- item boxes in red, with their ids in blue;
+- traced runs in orange, with their run ids.
+
+### Intermediate files
+
+| File | Written by | Contents |
+|---|---|---|
+| `detect.json` | detect | Merged items with ids, tile count, raw detection count, token usage |
+| `trace.raw.txt`, `trace.json` | trace | The model's raw reply; the items and the traced runs |
+| `draft.json` | before review | The result before review, in the same format as `sheet.json` |
+| `review.json` | review | The agent's edit log and final message |
+
+### `summary.json`
+
+The run's status, source file, model, sheet counts, total token usage and cost, the result entry of
+every page (the sheet summary above, or the failure), plant-graph statistics, and the S3 URIs of
+the plant outputs.

@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pidtwin"
+version = "2.0.0"
+description = "Digitize P&IDs into plant graphs with Amazon Bedrock models"
+requires-python = ">=3.12"
+license = "MIT-0"
+dependencies = ["pydantic>=2"]
+
+[project.optional-dependencies]
+# image digitization with Bedrock models (pidtwin.digitize)
+digitize = ["boto3", "pillow>=10.1", "strands-agents"]
+# PDF P&IDs (pidtwin.digitize.pdf)
+pdf = ["pypdfium2"]
+
+[project.scripts]
+pidtwin = "pidtwin.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

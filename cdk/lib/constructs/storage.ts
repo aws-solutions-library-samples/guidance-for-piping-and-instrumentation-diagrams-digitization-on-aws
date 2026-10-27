@@ -1,7 +1,6 @@
 import * as cdk from 'aws-cdk-lib';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as kms from 'aws-cdk-lib/aws-kms';
-import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 import { NagSuppressions } from 'cdk-nag';
 
@@ -14,10 +13,6 @@ export class StorageConstruct extends Construct {
 
   constructor(scope: Construct, id: string) {
     super(scope, id);
-
-    // Get account and region
-    const account = cdk.Stack.of(this).account;
-    const region = cdk.Stack.of(this).region;
 
     // Create KMS keys for each bucket
     this.inputBucketKey = new kms.Key(this, 'InputBucketKey', {
@@ -42,7 +37,7 @@ export class StorageConstruct extends Construct {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
       serverAccessLogsPrefix: 'access-logs/',
-      eventBridgeEnabled: true,
+      eventBridgeEnabled: true, // drives the upload trigger
     });
 
     this.outputBucket = new s3.Bucket(this, 'OutputBucket', {
@@ -55,37 +50,6 @@ export class StorageConstruct extends Construct {
       autoDeleteObjects: true,
       serverAccessLogsPrefix: 'access-logs/',
     });
-
-    // Grant Bedrock Data Automation service permissions to read from input bucket
-    this.inputBucket.addToResourcePolicy(new iam.PolicyStatement({
-      effect: iam.Effect.ALLOW,
-      principals: [new iam.ServicePrincipal('bedrock.amazonaws.com')],
-      actions: [
-        's3:GetObject',
-        's3:GetObjectVersion',
-      ],
-      resources: [`${this.inputBucket.bucketArn}/*`],
-      conditions: {
-        StringEquals: {
-          'aws:SourceAccount': account,
-        },
-        StringLike: {
-          'aws:SourceArn': `arn:aws:bedrock:${region}:${account}:data-automation-invocation/*`,
-        },
-      },
-    }));
-
-    // Grant Bedrock Data Automation service permissions to use the KMS keys
-    this.inputBucketKey.grantDecrypt(new iam.ServicePrincipal('bedrock.amazonaws.com', {
-      conditions: {
-        StringEquals: {
-          'aws:SourceAccount': account,
-        },
-        StringLike: {
-          'aws:SourceArn': `arn:aws:bedrock:${region}:${account}:data-automation-invocation/*`,
-        },
-      },
-    }));
 
     // Add CDK Nag suppressions for auto delete objects
     NagSuppressions.addResourceSuppressions(this.inputBucket, [

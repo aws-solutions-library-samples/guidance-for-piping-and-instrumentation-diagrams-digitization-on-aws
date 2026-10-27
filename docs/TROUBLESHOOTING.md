@@ -1,498 +1,98 @@
-# Troubleshooting Guide
-
-This document provides solutions for common issues encountered with the P&ID Digitization Pipeline.
-
-## Common Issues
-
-### Step Functions Errors
-
-#### JSONPath Errors
-**Error**: `JSONPath '$.processing_config' could not be found`
-
-**Cause**: Missing required input structure
-
-**Solution**: Ensure your Step Functions input includes `processing_config`:
-```json
-{
-  "image_key": "image.png",
-  "input_bucket": "bucket-name",
-  "processing_config": {}  // Add this even if empty
-}
-```
-
-#### State Machine Execution Failed
-**Error**: Step Functions execution shows failed state
-
-**Solution**:
-1. Check the execution graph in AWS Console
-2. Click on the failed state to see error details
-3. Check CloudWatch logs for the specific Lambda function
-4. Look for validation or processing errors in the logs
-
-### Configuration Issues
-
-#### Configuration Validation Errors
-**Error**: `Configuration validation failed for line_detection.threshold`
-
-**Cause**: Invalid parameter type or value
-
-**Solution**: Check parameter types and ranges:
-```json
-{
-  "processing_config": {
-    "line_detection": {
-      "threshold": 3,        // Must be integer, not "3"
-      "rho": 0.5,           // Must be float
-      "max_line_gap": 120   // Must be positive integer
-    }
-  }
-}
-```
-
-**Common validation errors:**
-- `threshold` must be integer between 1-20
-- `rho` must be float between 0.1-2.0
-- `merge_distance_threshold` must be float between 0.001-0.1
-- `manual_coordinates` must have integer x, y, width, height
-
-#### Manual Coordinates Validation
-**Error**: `Invalid coordinate values - must be integers`
-
-**Solution**: Ensure all coordinate values are integers:
-```json
-{
-  "manual_coordinates": {
-    "x": 100,     // Integer, not 100.0
-    "y": 50,      // Integer, not "50"
-    "width": 800, // Integer
-    "height": 600 // Integer
-  }
-}
-```
-
-**Error**: `Crop region exceeds image bounds`
-
-**Solution**: Verify coordinates are within image dimensions:
-```json
-{
-  "manual_coordinates": {
-    "x": 100,
-    "y": 50,
-    "width": 800,  // x + width must be ≤ image width
-    "height": 600  // y + height must be ≤ image height
-  }
-}
-```
-
-### Lambda Function Issues
-
-#### Function Timeout
-**Error**: Lambda function timeout after 15 minutes
-
-**Solutions**:
-1. **Reduce image size** before processing:
-   ```bash
-   # Resize image before upload
-   convert large-image.png -resize 2000x2000\> smaller-image.png
-   ```
-
-2. **Use manual coordinates** to process smaller regions:
-   ```json
-   {
-     "processing_config": {
-       "notes_processing": {
-         "manual_coordinates": {
-           "x": 0, "y": 0, "width": 1000, "height": 1000
-         }
-       }
-     }
-   }
-   ```
-
-3. **Optimize parameters** for faster processing:
-   ```json
-   {
-     "processing_config": {
-       "line_detection": {
-         "threshold": 6,      // Higher threshold = fewer detections
-         "min_line_length": 20 // Longer minimum = fewer lines
-       }
-     }
-   }
-   ```
-
-#### Memory Issues
-**Error**: Lambda function out of memory
-
-**Solutions**:
-1. **Reduce image resolution** before processing
-2. **Use Docker-based functions** which have higher memory limits
-3. **Process images in smaller chunks** using manual coordinates
-
-#### Import Errors
-**Error**: `No module named 'config_helper'`
-
-**Cause**: Shared files not synchronized
-
-**Solution**:
-```bash
-cd cdk
-node scripts/sync-shared-files.js
-cdk deploy
-```
-
-### Line Detection Issues
-
-#### Parallel Lines Merging Incorrectly
-**Issue**: Two parallel lines being merged into a single diagonal line
-
-**Cause**: `merge_distance_threshold` too high
-
-**Solution**: Reduce merge distance threshold:
-```json
-{
-  "processing_config": {
-    "line_detection": {
-      "postprocess_params": {
-        "merge_distance_threshold": 0.008,  // Reduced from 0.02
-        "angular_tolerance": 5.0             // More strict angle matching
-      }
-    }
-  }
-}
-```
-
-#### Missing Line Segments
-**Issue**: Line segments missing or fragmented
-
-**Cause**: Detection parameters too restrictive
-
-**Solution**: Adjust core detection parameters:
-```json
-{
-  "processing_config": {
-    "line_detection": {
-      "threshold": 2,         // Lower threshold = more detections
-      "max_line_gap": 150,    // Larger gap = more connections
-      "min_line_length": 5,   // Shorter minimum = more lines
-      "postprocess_params": {
-        "extension_padding": 0.02  // More extension for connections
-      }
-    }
-  }
-}
-```
-
-#### Too Many False Positive Lines
-**Issue**: Detecting noise or artifacts as lines
-
-**Cause**: Detection too sensitive
-
-**Solution**: Make detection more selective:
-```json
-{
-  "processing_config": {
-    "line_detection": {
-      "threshold": 6,         // Higher threshold = more selective
-      "min_line_length": 20   // Longer minimum = less noise
-    }
-  }
-}
-```
-
-#### Lines Disappearing After Thinning
-**Issue**: Thin lines disappear during preprocessing
-
-**Cause**: Thinning removes already-thin lines
-
-**Solution**: Disable thinning for thin lines:
-```json
-{
-  "processing_config": {
-    "line_detection": {
-      "enable_thinning": false
-    }
-  }
-}
-```
-
-### Text Detection Issues
-
-#### Bedrock Data Automation Timeout
-**Error**: `BDA job did not complete within timeout period`
-
-**Solution**: Increase timeout and retries:
-```json
-{
-  "processing_config": {
-    "text_detection": {
-      "timeout_seconds": 600,  // Increased to 10 minutes
-      "max_retries": 5
-    }
-  }
-}
-```
-
-#### Missing Text Elements
-**Issue**: Text not being detected in specific regions
-
-**Cause**: Text outside processed region or low quality
-
-**Solutions**:
-1. **Verify image quality** - text should be clearly readable
-2. **Check manual coordinates** - ensure text region is included
-3. **Use original image** - avoid over-preprocessing before text detection
-
-### Symbol Detection Issues
-
-#### SageMaker Endpoint Errors
-**Error**: `EndpointNotFound` or `ModelNotFound`
-
-**Cause**: SageMaker endpoint not deployed or model URI incorrect
-
-**Solution**:
-1. Check model URI in `cdk/config.json`:
-   ```json
-   {
-     "model": {
-       "s3Uri": "s3://your-bucket/path/to/model.tar.gz"
-     }
-   }
-   ```
-
-2. Verify endpoint is deployed:
-   ```bash
-   aws sagemaker list-endpoints
-   ```
-
-3. Redeploy if necessary:
-   ```bash
-   cdk deploy
-   ```
-
-#### Low Symbol Detection Confidence
-**Issue**: Symbols not being detected or low confidence scores
-
-**Solution**: Adjust confidence threshold:
-```json
-{
-  "processing_config": {
-    "symbol_detection": {
-      "confidence_threshold": 0.7,  // Reduced from 0.9
-      "nms_threshold": 0.5
-    }
-  }
-}
-```
-
-### Graph Generation Issues
-
-#### Component Filtering Removing Valid Elements
-**Issue**: Important symbols or lines being filtered out
-
-**Cause**: Component filtering too aggressive
-
-**Solution**: Disable or adjust component filtering:
-```json
-{
-  "processing_config": {
-    "graph_generation": {
-      "component_filter": {
-        "enabled": false  // Disable completely
-      }
-    }
-  }
-}
-```
-
-Or make filtering more conservative:
-```json
-{
-  "processing_config": {
-    "graph_generation": {
-      "component_filter": {
-        "enabled": true,
-        "min_component_size": 2,                    // Keep smaller components
-        "max_symbol_density_for_removal": 0.05     // Lower removal threshold
-      }
-    }
-  }
-}
-```
-
-#### Missing Connections Between Elements
-**Issue**: Symbols and lines not connecting properly
-
-**Cause**: Distance thresholds too restrictive
-
-**Solution**: Increase distance thresholds:
-```json
-{
-  "processing_config": {
-    "graph_generation": {
-      "distance_threshold_symbols": 80,  // Increased from 60
-      "distance_threshold_text": 40,     // Increased from 30
-      "distance_threshold_lines": 30     // Increased from 20
-    }
-  }
-}
-```
-
-### S3 and Access Issues
-
-#### S3 Access Denied
-**Error**: `AccessDenied` when accessing S3 buckets
-
-**Solutions**:
-1. **Check bucket policies** and IAM permissions
-2. **Verify VPC endpoints** are configured if using VPC
-3. **Check KMS key permissions** for encrypted buckets
-
-#### Files Not Found in Expected Locations
-**Issue**: Processing results not found in S3
-
-**Cause**: Execution-based file organization
-
-**Solution**: Files are organized by execution ID:
-```
-s3://bucket/executions/exec-20250108-150426-abc123/
-├── processed/image_processed.png
-├── text_detection_results.json
-├── graph_data.json
-└── visualizations/physical_layout.png
-```
-
-Use the execution ID from Lambda responses to locate files.
-
-### Performance Optimization
-
-#### Slow Processing Times
-**Issue**: Pipeline takes very long to process images
-
-**Solutions**:
-1. **Reduce image size**:
-   ```bash
-   # Resize before upload
-   convert input.png -resize 1920x1920\> optimized.png
-   ```
-
-2. **Use manual coordinates** for targeted processing:
-   ```json
-   {
-     "processing_config": {
-       "notes_processing": {
-         "manual_coordinates": {
-           "x": 100, "y": 100, "width": 800, "height": 600
-         }
-       }
-     }
-   }
-   ```
-
-3. **Optimize parameters**:
-   ```json
-   {
-     "processing_config": {
-       "line_detection": {
-         "threshold": 5,                    // Higher = faster
-         "enable_thinning": false,          // Skip if not needed
-         "postprocess_params": {
-           "enable_symbol_intersection": false  // Disable if not needed
-         }
-       },
-       "graph_generation": {
-         "component_filter": {
-           "enabled": false                 // Skip filtering
-         }
-       }
-     }
-   }
-   ```
-
-## Debugging Steps
-
-### 1. Check CloudWatch Logs
-```bash
-# List log groups
-aws logs describe-log-groups --log-group-name-prefix "/aws/lambda/pnid"
-
-# Get recent log events
-aws logs filter-log-events \
-  --log-group-name "/aws/lambda/InputValidator" \
-  --start-time $(date -d '1 hour ago' +%s)000
-```
-
-### 2. Test Individual Lambda Functions
-```bash
-# Test InputValidator
-aws lambda invoke \
-  --function-name InputValidator \
-  --payload '{"image_key":"test.png","input_bucket":"bucket","processing_config":{}}' \
-  response.json
-
-cat response.json
-```
-
-### 3. Validate Configuration Locally
-```python
-# Test configuration validation
-import json
-from cdk.lambda.input_validator.config_validator import ConfigValidator
-
-validator = ConfigValidator()
-config = {
-  "line_detection": {
-    "threshold": 5,
-    "max_line_gap": 150
-  }
-}
-
-try:
-  validated = validator.get_validated_config('line_detection', config)
-  print("Valid configuration:", validated)
-except Exception as e:
-  print("Validation error:", str(e))
-```
-
-### 4. Monitor Step Functions Execution
-1. Go to AWS Console → Step Functions
-2. Find your state machine
-3. Click on execution to see execution graph
-4. Check each step for errors or timeouts
-5. Review input/output for each step
-
-### 5. Check S3 File Organization
-```bash
-# List files in execution directory
-aws s3 ls s3://your-output-bucket/executions/exec-20250108-150426-abc123/ --recursive
-
-# Download specific result for inspection
-aws s3 cp s3://your-output-bucket/executions/exec-20250108-150426-abc123/graph_data.json ./
-```
-
-## Getting Help
-
-### Error Reporting
-When reporting issues, include:
-1. **Complete error message** from CloudWatch logs
-2. **Input configuration** used (sanitized)
-3. **Image characteristics** (size, format, complexity)
-4. **Expected vs actual behavior**
-5. **AWS region and deployment details**
-
-### Log Analysis
-Key log patterns to look for:
-- `Configuration validation failed` - Parameter issues
-- `Error in [function] processing` - Processing failures
-- `Timeout` - Performance issues
-- `Access denied` - Permission problems
-- `File not found` - S3 path issues
-
-### Performance Profiling
-Monitor these CloudWatch metrics:
-- **Duration** - Function execution time
-- **Memory utilization** - Peak memory usage
-- **Error rate** - Failed invocations
-- **Throttles** - Concurrent execution limits
-
-For additional support, check the main [README.md](../README.md) or create an issue in the project repository.
+# Troubleshooting
+
+Start with the failed execution in the Step Functions console:
+
+- **Failed sheets.** A failed sheet shows up as a `SheetFailed` result in the `Sheets` Map. Its
+  `error` and `cause` come from the agent.
+- **Run summary.** `summary.json` in the run's output prefix lists every sheet's status.
+- **Agent logs** are in CloudWatch Logs under `/aws/bedrock-agentcore/runtimes/<runtime id>-DEFAULT`.
+  Filter on the sheet ID.
+- **Lambda logs** are in the `PrepareInput`, `DispatchSheet` and `MergeSheets` log groups of the
+  stack.
+
+## The run fails in PrepareInput with `InputError`
+
+The drawing or the per-run config was rejected. The cause names the problem:
+
+| Message | Fix |
+|---|---|
+| `modelId ... is not allowed` | Use a model listed in `digitization.allowedModelIds`, or add it there and redeploy. |
+| `unsupported file type` | Convert the drawing to PDF, PNG, JPEG, TIFF or WebP. |
+| `... has N pages; the limit is M` | Split the PDF, or raise `pdf.maxPages`. |
+| `cannot read ...` | The file is corrupt, or is not what its extension says. |
+| `drawings must be uploaded to the input bucket` | Start runs on objects in the stack's input bucket. |
+| `... not found` | Check the key. Keys are case-sensitive. |
+
+## A sheet fails with `AccessDeniedException` from Bedrock
+
+- The model is not enabled in the account and Region, or the account has not accepted the model's
+  offer. Check Bedrock **Model access**. Third-party models can need a one-time offer acceptance,
+  done by an identity with `aws-marketplace:Subscribe`.
+- The inference profile isn't available in your deployment Region. Choose a profile that is, such
+  as `us.`, `eu.`, `apac.` or `global.`, add it to `allowedModelIds`, and redeploy.
+
+## Sheets fail with `ThrottlingException` or `ModelThrottledException`
+
+The run is making more model calls than your Bedrock quota allows. Each sheet sends one request
+per tile in parallel during detect, then a stream of requests during review. Sheets are retried
+twice with backoff. If they still fail:
+
+- lower `orchestration.maxConcurrentSheets`, or start fewer runs at a time;
+- request higher quotas for the model (Service Quotas → Amazon Bedrock → tokens and requests per
+  minute for the inference profile);
+- use a `global.` inference profile, if one exists for your model, to spread the load.
+
+## A sheet fails with `States.HeartbeatTimeout`
+
+The agent sent no heartbeat for 5 minutes. Usually its session ended: it crashed, ran out of
+memory, or reached its maximum lifetime. Look at the agent logs around the last heartbeat.
+
+- **The session ran out of memory.** Very large sheets can cause this. Pages are capped at
+  20,000 px per side; render PDFs at a lower `pdf.dpi` (200 is usually enough to read tags).
+- **The sheet keeps timing out.** Raise `orchestration.sheetTimeoutMinutes`. The session's
+  maximum lifetime follows it.
+
+The retry reuses the detect and trace results already in S3, so only the review step runs again.
+
+## A sheet fails with `States.Timeout`
+
+The sheet took longer than `sheetTimeoutMinutes`. Dense sheets with a high `review.maxViews` on a
+slow model are the usual cause. Raise the timeout, lower `maxViews`, or use a faster model.
+
+## The review step fails with a validation error about images (non-Claude models)
+
+Some providers reject images inside tool results. The review agent works around this for `openai`
+models. For another provider, add its provider name to `TOOL_RESULT_IMAGES` in
+`pidtwin/src/pidtwin/digitize/review.py` and redeploy. The provider name is the part of the model ID
+after the Region prefix, for example `openai` in `us.openai.gpt-6.1-sol`.
+
+## Uploading a file did not start a run
+
+- The object must be under `uploadTrigger.prefix`, which defaults to `drawings/`, and must end in a
+  supported extension. Both upper and lower case work, but not mixed case such as `.Pdf`.
+- `uploadTrigger.enabled` must be true when you deploy.
+- EventBridge notifications must be enabled on the input bucket. The stack turns them on, so check
+  that nobody turned them off.
+
+## Results look wrong
+
+- Open `sheets/<sheet>/overlay.png` to see what the model found and where.
+- Read `issues.json` for the rule violations left after review. A cluster of `valve_degree` or
+  `dangling_pipe` issues in one area usually means a missed or misrouted line there.
+- Compare `draft.json` (before review) with `sheet.json`, and read the agent's notes in
+  `review.json`. If the review ran out of views (`views` equals `maxViews` and `finished` is false),
+  raise `review.maxViews`.
+- If the notes on your drawings say dashed lines are piping alternates, set `dashedAsPiping: true`.
+- Try another model on the same sheet. See the benchmark in the [README](../README.md#accuracy-and-model-choice).
+
+## Deployment problems
+
+| Symptom | Fix |
+|---|---|
+| `Cannot find module` / TypeScript errors | Run `npm install` in `cdk/`. |
+| Bundling tries to run Docker | Install [uv](https://docs.astral.sh/uv/). The stack bundles Python locally with uv, and only falls back to Docker. |
+| `uv pip install` cannot find a wheel | A dependency has no Linux arm64 wheel for Python 3.13. Pin a version that has one in the `requirements.txt` that fails. |
+| `digitization.modelId ... must be one of digitization.allowedModelIds` | Fix `config.json`. |
+| `cdk destroy PNIDDigitization-Network` fails on the security group or subnets | AgentCore keeps its network interfaces for up to 8 hours after the runtime is deleted. Run it again later. |
+| `cdk destroy PNIDDigitization-Network` says an export is in use | Destroy the application stack `PNIDDigitization` first. |
+| AgentCore Runtime creation fails in a VPC | Use subnets in [Availability Zones that AgentCore supports](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/agentcore-vpc.html), and make S3 reachable from them, because the runtime downloads its code from S3. |
