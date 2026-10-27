@@ -271,7 +271,7 @@ If a `<name>.truth.json` file sits next to the image, the pipeline scores the re
 To run the unit tests:
 
 ```bash
-.venv/bin/pip install bedrock-agentcore
+.venv/bin/pip install -e '.[test]'
 .venv/bin/python -m unittest discover tests
 ```
 

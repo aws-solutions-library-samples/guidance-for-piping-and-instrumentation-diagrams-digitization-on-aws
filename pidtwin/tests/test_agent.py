@@ -1,5 +1,5 @@
 """AgentCore entrypoint (cdk/agent/main.py): task-token callbacks, with S3, Step Functions and the
-digitizer replaced by fakes. Needs bedrock-agentcore installed (pip install -r ../cdk/agent/requirements.txt).
+digitizer replaced by fakes. Needs the test extra: pip install -e '.[test]'.
 
 Run: python -m unittest discover tests
 """

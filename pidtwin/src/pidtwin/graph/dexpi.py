@@ -10,10 +10,39 @@ output against the DEXPI XSD / your target tool before relying on it. What is wr
 Geometry is not written (P&ID boxes are sheet-normalized, not drawing units).
 """
 import datetime as dt
-import xml.etree.ElementTree as ET
 from collections import defaultdict
 
 from .schema import PHYSICAL
+
+# A tiny writer instead of xml.etree: the export only builds attribute-only elements and never
+# parses XML, and keeping the stdlib xml package out avoids XXE scanner findings on this module.
+_ESCAPES = {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "\n": "&#10;", "\r": "&#13;", "\t": "&#09;"}
+
+
+class _Element:
+    def __init__(self, tag, **attrib):
+        self.tag, self.attrib, self.children = tag, attrib, []
+
+    def write(self, out, depth=0):
+        pad = "  " * depth
+        attrs = "".join(f' {k}="{_attr(v)}"' for k, v in self.attrib.items())
+        if not self.children:
+            out.append(f"{pad}<{self.tag}{attrs} />")
+            return
+        out.append(f"{pad}<{self.tag}{attrs}>")
+        for c in self.children:
+            c.write(out, depth + 1)
+        out.append(f"{pad}</{self.tag}>")
+
+
+def _sub(parent, tag, **attrib):
+    el = _Element(tag, **attrib)
+    parent.children.append(el)
+    return el
+
+
+def _attr(v):
+    return "".join(_ESCAPES.get(c, c) for c in str(v))
 
 INLINE = {"valve", "fitting", "instrument"}
 
@@ -54,12 +83,12 @@ def _chains(g):
 def to_proteus(g, originating_system="pidtwin"):
     by_id = g.by_id()
     now = dt.datetime.now()
-    root = ET.Element("PlantModel")
-    ET.SubElement(root, "PlantInformation", SchemaVersion="4.1.1", OriginatingSystem=originating_system,
+    root = _Element("PlantModel")
+    _sub(root, "PlantInformation", SchemaVersion="4.1.1", OriginatingSystem=originating_system,
                   Date=now.strftime("%Y-%m-%d"), Time=now.strftime("%H:%M:%S"), Is3D="no", Units="mm",
                   Discipline="PID")
     for s in g.sheets:
-        ET.SubElement(root, "Drawing", Name=str(s.get("number") or s["id"]), Type="PID",
+        _sub(root, "Drawing", Name=str(s.get("number") or s["id"]), Type="PID",
                       Title=str(s.get("title") or ""))
     attrs = lambda n: {"ID": _xid(n.id), "ComponentClass": n.dexpi_class or "CustomPipingComponent",
                        **({"TagName": n.tag} if n.tag else {})}
@@ -76,9 +105,9 @@ def to_proteus(g, originating_system="pidtwin"):
                 end_ref[(i, k)] = _xid(t)
     for n in g.nodes:
         if n.category == "equipment":
-            eq = ET.SubElement(root, "Equipment", **attrs(n))
+            eq = _sub(root, "Equipment", **attrs(n))
             for k in range(1, nozzles[n.id] + 1):
-                ET.SubElement(eq, "Nozzle", ID=f"{_xid(n.id)}-N{k}", ComponentClass="Nozzle")
+                _sub(eq, "Nozzle", ID=f"{_xid(n.id)}-N{k}", ComponentClass="Nozzle")
 
     systems = {}
     for i, (a, seq, b) in enumerate(chains):
@@ -86,38 +115,39 @@ def to_proteus(g, originating_system="pidtwin"):
                 [by_id[x].line_number for x in (a, b) if by_id[x].category == "tee" and by_id[x].line_number]
         line = lines[0] if lines else None
         if line not in systems:
-            systems[line] = ET.SubElement(root, "PipingNetworkSystem", ID=f"PNS{len(systems) + 1}",
+            systems[line] = _sub(root, "PipingNetworkSystem", ID=f"PNS{len(systems) + 1}",
                                           ComponentClass="PipingNetworkSystem")
             if line:
-                ga = ET.SubElement(systems[line], "GenericAttributes", Set="DexpiAttributes")
-                ET.SubElement(ga, "GenericAttribute", Name="LineNumberAssignmentClass", Value=line, Format="string")
-        seg = ET.SubElement(systems[line], "PipingNetworkSegment", ID=f"PNSeg{i + 1}",
+                ga = _sub(systems[line], "GenericAttributes", Set="DexpiAttributes")
+                _sub(ga, "GenericAttribute", Name="LineNumberAssignmentClass", Value=line, Format="string")
+        seg = _sub(systems[line], "PipingNetworkSegment", ID=f"PNSeg{i + 1}",
                             ComponentClass="PipingNetworkSegment")
         for x in seq:
             n = by_id[x]
             if n.category == "pipe":
-                p = ET.SubElement(seg, "PipingComponent", ID=_xid(n.id), ComponentClass="Pipe")
+                p = _sub(seg, "PipingComponent", ID=_xid(n.id), ComponentClass="Pipe")
                 if n.nominal_size:
-                    ET.SubElement(p, "NominalDiameter", Value=n.nominal_size.rstrip('"'), Units="in")
+                    _sub(p, "NominalDiameter", Value=n.nominal_size.rstrip('"'), Units="in")
             elif n.category == "instrument":
-                ET.SubElement(seg, "PipingComponent", **{**attrs(n), "ComponentClass": "InlinePrimaryElement"})
+                _sub(seg, "PipingComponent", **{**attrs(n), "ComponentClass": "InlinePrimaryElement"})
             else:
-                ET.SubElement(seg, "PipingComponent", **attrs(n))
-        ET.SubElement(seg, "Connection", FromID=end_ref[(i, 0)], ToID=end_ref[(i, 1)])
+                _sub(seg, "PipingComponent", **attrs(n))
+        _sub(seg, "Connection", FromID=end_ref[(i, 0)], ToID=end_ref[(i, 1)])
     for n in g.nodes:
         if n.category in ("tee", "offpage"):
-            el = ET.SubElement(root, "PipingComponent" if n.category == "tee" else "PipeOffPageConnector", **attrs(n))
+            el = _sub(root, "PipingComponent" if n.category == "tee" else "PipeOffPageConnector", **attrs(n))
             if n.category == "offpage" and n.text:
-                ET.SubElement(el, "Label", Text=n.text)
+                _sub(el, "Label", Text=n.text)
     for n in g.nodes:
         if n.category == "instrument":
-            ET.SubElement(root, "ProcessInstrumentationFunction",
+            _sub(root, "ProcessInstrumentationFunction",
                           **{**attrs(n), "ID": f"{_xid(n.id)}-PIF", "ComponentClass": "ProcessInstrumentationFunction"})
     for k, e in enumerate(x for x in g.edges if x.kind == "signal"):
-        ET.SubElement(root, "InformationFlow", ID=f"IF{k + 1}", ComponentClass="SignalLineFunction",
+        _sub(root, "InformationFlow", ID=f"IF{k + 1}", ComponentClass="SignalLineFunction",
                       FromID=_xid(e.src), ToID=_xid(e.dst))
-    ET.indent(root)
-    return ET.tostring(root, encoding="unicode", xml_declaration=True)
+    out = ["<?xml version='1.0' encoding='utf-8'?>"]
+    root.write(out)
+    return "\n".join(out)
 
 
 def _xid(s):

@@ -3,4 +3,3 @@ cdk.out
 cdk.context.json
 dist/
 config.json
-__pycache__

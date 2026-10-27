@@ -1,8 +1,9 @@
 """Run: .venv/bin/python -m unittest discover tests"""
 import json
 import unittest
-import xml.etree.ElementTree as ET
 from pathlib import Path
+
+from defusedxml.ElementTree import fromstring
 
 from pidtwin.graph.build import build_graph, parse_line_number
 from pidtwin.graph.dexpi import _chains, to_proteus
@@ -157,12 +158,21 @@ class Merge(unittest.TestCase):
 class Dexpi(unittest.TestCase):
     def test_export_parses_and_covers_every_inline_item_once(self):
         g = build_graph(SHEET)
-        root = ET.fromstring(to_proteus(g).split("?>", 1)[1])
+        root = fromstring(to_proteus(g).split("?>", 1)[1])
         self.assertEqual(root.tag, "PlantModel")
         inline = [i for _, seq, _ in _chains(g) for i in seq]
         self.assertEqual(len(inline), len(set(inline)))
         ids = [e.get("ID") for e in root.iter() if e.get("ID")]
         self.assertEqual(len(ids), len(set(ids)))
+
+
+    def test_attribute_values_are_escaped(self):
+        out = tiny(line='4"-P-100 & <x>')
+        out["offpage"][0]["text"] = 'TO "UNIT 2"\nNORTH'
+        root = fromstring(to_proteus(build_graph(out)).split("?>", 1)[1])
+        values = [v for e in root.iter() for v in e.attrib.values()]
+        self.assertIn('4"-P-100 & <x>', values)
+        self.assertIn('TO "UNIT 2"\nNORTH', values)
 
 
 class Dot(unittest.TestCase):
