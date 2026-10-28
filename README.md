@@ -47,22 +47,7 @@ v1 code and model from the [v1.0.0 release](https://github.com/aws-solutions-lib
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    U[Upload drawing<br/>s3://input/drawings/] -- EventBridge --> SF
-    M[StartExecution<br/>bucket, key, config] --> SF
-    subgraph SF[Step Functions workflow]
-        P[PrepareInput<br/>Lambda] --> MAP
-        subgraph MAP[Map over sheets, MaxConcurrency]
-            D[DispatchSheet Lambda<br/>waitForTaskToken]
-        end
-        MAP --> G[MergeSheets<br/>Lambda]
-    end
-    D -- InvokeAgentRuntime --> A[AgentCore Runtime session<br/>detect, trace, review agent,<br/>sheet graph]
-    A -- Converse --> B[Amazon Bedrock model]
-    A -- SendTaskSuccess / Failure / Heartbeat --> SF
-    P & A & G <--> S3[(S3 output bucket<br/>KMS encrypted)]
-```
+![Architecture diagram](docs/architecture.png)
 
 1. A drawing (PDF, PNG, JPEG, TIFF or WebP) arrives in the input bucket. An upload under
    `drawings/` starts the workflow through EventBridge, or you can start it yourself.
