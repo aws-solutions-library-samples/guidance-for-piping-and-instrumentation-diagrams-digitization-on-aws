@@ -1,4 +1,0 @@
-opencv-python-headless
-numpy
-pytesseract
-Pillow

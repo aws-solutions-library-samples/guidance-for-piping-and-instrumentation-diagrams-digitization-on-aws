@@ -1,0 +1,2 @@
+pypdfium2>=4.30
+pillow>=10.1

@@ -1,0 +1,10 @@
+# OS and editor files
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# Working files (diagram source, Office lock files)
+guidance-docs/
+~$*

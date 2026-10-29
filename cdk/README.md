@@ -1,217 +1,71 @@
-# P&ID Processing CDK Stack
+# P&ID Digitization CDK stack
 
-This CDK stack deploys a serverless pipeline for processing P&ID (Piping and Instrumentation Diagram) documents using AWS Lambda, SageMaker, Textract, and Step Functions.
+Deploys the workflow described in the [top-level README](../README.md) as two stacks:
 
-## Architecture
+| Stack | Class | Contents |
+|---|---|---|
+| `PNIDDigitization-Network` | [`PNIDNetworkStack`](lib/network-stack.ts) | `Networking` |
+| `PNIDDigitization` | [`PNIDDigitizationStack`](lib/pnid-digitization-stack.ts) | `Storage`, `Digitizer`, `Functions`, `Orchestration` |
 
-The stack includes:
-- **Storage**: S3 buckets with KMS encryption for input, processing, output, and temporary files
-- **Processing**: Lambda functions for input validation, line detection, and graph generation
-- **ML**: SageMaker endpoint for symbol detection
-- **Orchestration**: Step Functions for pipeline coordination
-- **Networking**: Optional VPC deployment with VPC endpoints
+The application stack imports the VPC, subnets and security group from the network stack. The
+references are strong (`@aws-cdk/core:defaultCrossStackReferences` in `cdk.json`), so the network
+stack cannot be deleted while the application stack uses it. The split exists because AgentCore
+keeps its network interfaces in the subnets for up to 8 hours after a runtime is deleted. A failed
+deploy or a `cdk destroy` of the application stack never has to wait for them. Set
+`CDK_STACK_NAME` to change the name prefix of both stacks.
 
-## VPC Configuration
+## What it creates
 
-### Overview
+| Construct | Resources |
+|---|---|
+| `Storage` ([storage.ts](lib/constructs/storage.ts)) | Input and output buckets: KMS-encrypted (one customer managed key each), versioned, TLS only, public access blocked, access logs under `access-logs/`. EventBridge notifications are on for the input bucket. |
+| `Digitizer` ([agent.ts](lib/constructs/agent.ts)) | AgentCore Runtime, a Python 3.13 zip deployment of [`agent/`](agent/) plus the `pidtwin` package. Its execution role can read and write the output bucket, invoke only the allowed Bedrock models, and send Step Functions task callbacks. |
+| `Functions` ([functions.ts](lib/constructs/functions.ts)) | `PrepareInput`, `DispatchSheet` and `MergeSheets`: Python 3.13 Lambdas on arm64, from [`lambda/`](lambda/), with least-privilege grants. |
+| `Orchestration` ([orchestration.ts](lib/constructs/orchestration.ts)) | Standard Step Functions state machine with logging and X-Ray tracing, plus the EventBridge upload rule. |
+| `Networking` ([networking.ts](lib/constructs/networking.ts)) | By default a new isolated VPC: two private subnets placed by AgentCore-supported AZ ID, no internet or NAT gateway, flow logs, interface endpoints (bedrock-runtime, bedrock-agentcore, states, logs) and an S3 gateway endpoint (limited to buckets of this account plus AgentCore's code buckets), all with scoped endpoint policies. Alternatively an existing VPC (`vpc.vpcId`). The Lambdas and the agent runtime share one workload security group (HTTPS egress only). |
 
-Lambda functions can be deployed in an existing VPC with private subnets and VPC endpoints for secure, internet-free operation. This provides:
+Settings are read from `config.json` over the defaults in `config.json.template`
+([lib/config.ts](lib/config.ts)). See [Configuration](../docs/CONFIGURATION.md).
 
-- **Enhanced Security**: Complete isolation from the internet
-- **Cost Optimization**: No NAT Gateway required (~$45/month savings)
-- **Compliance**: Suitable for regulated environments
-- **Performance**: Direct AWS backbone routing through VPC endpoints
+## Packaging
 
-### Configuration File
+The agent and the Lambdas run on Linux arm64. [`lib/bundling.ts`](lib/bundling.ts) builds each
+asset as follows:
 
-Create or update `config.json` in the CDK root directory:
+1. Install the directory's `requirements.txt`, if it has one, with
+   `uv pip install --python-platform aarch64-manylinux2014 --python-version 3.13 --only-binary=:all:`.
+2. Copy in the handler.
 
-```json
-{
-  "vpc": {
-    "vpcId": "vpc-xxxxxxxxx",
-    "subnetIds": ["subnet-xxxxx", "subnet-yyyyy"],
-    "createVpcEndpoints": true
-  },
-  "endpoints": {
-    "s3": true,
-    "sagemaker": true,
-    "textract": true,
-    "logs": true
-  },
-  "model": {
-    "s3Uri": "s3://your-bucket-name/models/symbol-detection/model.tar.gz"
-  }
-}
-```
+   The Lambdas use the boto3 that ships with the Lambda runtime, so it isn't bundled. The agent
+   bundles boto3, because AgentCore's zip runtime doesn't include it.
+3. For the agent, PrepareInput and MergeSheets, also copy in
+   [`../pidtwin/src/pidtwin`](../pidtwin/src/pidtwin).
 
-### Configuration Parameters
+This needs uv on the deploying machine, not Docker. Without uv, the same build runs in the
+`public.ecr.aws/sam/build-python3.13` arm64 image. Asset hashes cover the source files and
+requirements, so unchanged code is not re-uploaded.
 
-| Parameter | Description | Required |
-|-----------|-------------|----------|
-| `vpc.vpcId` | Your existing VPC ID | Yes (for VPC deployment) |
-| `vpc.subnetIds` | Array of private subnet IDs where Lambda functions will be deployed | Yes (for VPC deployment) |
-| `vpc.createVpcEndpoints` | Whether to create VPC endpoints for AWS services | No (default: true) |
-| `endpoints.s3` | Create S3 Gateway endpoint (free) | No (default: true) |
-| `endpoints.sagemaker` | Create SageMaker Runtime interface endpoint | No (default: true) |
-| `endpoints.textract` | Create Textract interface endpoint | No (default: true) |
-| `endpoints.logs` | Create CloudWatch Logs interface endpoint | No (default: true) |
-| `model.s3Uri` | S3 URI of the model.tar.gz file for SageMaker | Yes |
+## Checks
 
-### Deployment Steps
+`cdk synth` runs [cdk-nag](https://github.com/cdklabs/cdk-nag) with the AWS Solutions pack and a
+prototype security pack ([lib/prototype-security.ts](lib/prototype-security.ts)). Each suppression
+in the code gives its reason.
 
-1. **Configure VPC settings**:
-   ```bash
-   # Copy the template and fill in your values
-   cp config.json.template config.json
-   # Edit config.json with your VPC ID, subnet IDs, and model S3 URI
-   ```
+One warning is left: *Bedrock Guardrails Exists*. The digitizer reads engineering drawings and
+returns structured data. It does not chat with end users, so no guardrail is attached. If your
+drawings can contain text that should never reach a model or its output, add a guardrail to the
+model calls in `pidtwin/digitize/pipeline.py` and `review.py`.
 
-2. **Deploy the stack**:
-   ```bash
-   cdk deploy
-   ```
-
-3. **Verify deployment**:
-   - Check CloudFormation outputs for VPC configuration status and deployed region
-   - Verify VPC endpoints are created in your VPC console
-   - Test Lambda function execution
-
-### VPC Requirements
-
-- **VPC**: Existing VPC with DNS resolution and DNS hostnames enabled
-- **Subnets**: Private subnets (no internet gateway route)
-- **Security Groups**: Automatically created with least-privilege access
-- **Route Tables**: Must have routes to VPC endpoints (automatically configured)
-
-### VPC Endpoints Created
-
-| Service | Type | Purpose | Cost |
-|---------|------|---------|------|
-| S3 | Gateway | S3 bucket access | Free |
-| SageMaker Runtime | Interface | ML model inference | ~$7.30/month |
-| Textract | Interface | Document text extraction | ~$7.30/month |
-| CloudWatch Logs | Interface | Lambda logging | ~$7.30/month |
-
-*Interface endpoint costs are per AZ per month in us-east-1*
-
-### Security Groups
-
-The stack creates security groups with minimal required access:
-
-- **Lambda Security Group**: 
-  - Outbound HTTPS (443) to VPC endpoints
-  - No inbound rules
-- **Endpoint Security Groups**: 
-  - Inbound HTTPS (443) from Lambda security group only
-
-### Troubleshooting
-
-#### Lambda Functions Not Starting
-- Verify subnet IDs are correct and in the same VPC
-- Check that subnets have available IP addresses
-- Ensure VPC has DNS resolution enabled
-
-#### Service Access Issues
-- Verify VPC endpoints are created and in "Available" state
-- Check security group rules allow HTTPS traffic
-- Confirm route tables include VPC endpoint routes
-
-#### High Costs
-- Monitor VPC endpoint usage in Cost Explorer
-- Consider disabling unused endpoints in configuration
-- Endpoints are charged per AZ - review AZ distribution
-
-#### Region Mismatch
-- Ensure your VPC is in the same region where you're deploying the stack
-- VPC endpoints must be in the same region as the VPC
-- Check CloudFormation outputs for the actual deployed region
-
-### Deployment Without VPC
-
-If no `config.json` file exists or VPC/subnet IDs are empty, Lambda functions deploy without VPC configuration and use internet gateway for AWS service access.
-
-## Standard Deployment
-
-### Prerequisites
-
-- AWS CLI configured
-- Node.js 18+ installed
-- CDK CLI installed (`npm install -g aws-cdk`)
-
-### Installation
+## Commands
 
 ```bash
-# Install dependencies
 npm install
-
-# Build the project (required for shared files sync)
-npm run build
-
-# Bootstrap CDK (first time only)
-cdk bootstrap
-
-# Deploy the stack
-cdk deploy
+npx tsc --noEmit            # type-check
+cdk synth                   # template + cdk-nag
+cdk deploy --all
+cdk destroy PNIDDigitization            # then, once AgentCore's ENIs are gone:
+cdk destroy PNIDDigitization-Network
 ```
 
-### Usage
-
-1. **Upload P&ID files** to the input S3 bucket (supports JPG, PNG, PDF)
-2. **Monitor processing** through Step Functions console
-3. **Retrieve results** from the output S3 bucket
-
-### ML Model Deployment
-
-1. Train your YOLO/Faster R-CNN model for symbol detection
-2. Upload model artifacts to S3 (e.g., `s3://your-bucket/models/symbol-detection/model.tar.gz`)
-3. Update the `model.s3Uri` in `config.json` with your model's S3 URI
-4. Redeploy the stack to update the SageMaker endpoint
-
-### Configuration
-
-The stack uses CDK context and configuration files:
-- Region uses CDK defaults (can be set via CDK CLI or environment)
-- Account is detected automatically
-- Model S3 URI must be specified in config.json
-- KMS encryption is enabled for all S3 buckets
-- CloudWatch log retention is set to 1 week
-- CDK Nag compliance is enforced
-
-### Monitoring
-
-- **CloudWatch Logs**: Lambda function logs with structured logging
-- **CloudWatch Metrics**: Lambda duration, errors, and invocations
-- **Step Functions**: Pipeline execution status and history
-- **S3 Metrics**: Bucket usage and request metrics
-
-### Cost Optimization
-
-- Lambda functions use appropriate memory allocation
-- S3 Intelligent Tiering for cost optimization
-- VPC endpoints eliminate NAT Gateway costs
-- Short log retention periods
-
-### Security Features
-
-- **Encryption**: KMS encryption for all data at rest
-- **IAM**: Least-privilege custom policies (no managed policies)
-- **VPC**: Optional private subnet deployment
-- **CDK Nag**: Automated security compliance checking
-
-### Clean Up
-
-```bash
-# Destroy all resources
-cdk destroy
-
-# Note: S3 buckets with data may need manual deletion
-```
-
-## Support
-
-For issues or questions:
-1. Check CloudWatch logs for Lambda errors
-2. Review Step Function execution history
-3. Verify CDK Nag compliance reports
-4. Monitor VPC Flow Logs for networking issues
+Python unit tests for the digitizer, the Lambdas and the agent entrypoint are in
+[`../pidtwin/tests`](../pidtwin/tests).

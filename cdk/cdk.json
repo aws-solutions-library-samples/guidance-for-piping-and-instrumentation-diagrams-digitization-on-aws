@@ -57,6 +57,7 @@
     "@aws-cdk/aws-sns:fifoTopicPartitionCount": true,
     "@aws-cdk/aws-kinesis:genericEndpoint": true,
     "@aws-cdk/core:disableLogicalIdMetadata": true,
-    "region": "us-east-1"
+    "region": "us-east-1",
+    "@aws-cdk/core:defaultCrossStackReferences": "strong"
   }
 }

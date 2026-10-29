@@ -1,15 +1,44 @@
 {
   "vpc": {
     "vpcId": "",
+    "cidr": "10.42.0.0/16",
+    "availabilityZoneIds": [],
     "subnetIds": [],
+    "routeTableIds": [],
     "createVpcEndpoints": true
   },
   "endpoints": {
-    "sagemaker": true,
-    "bedrock": true,
-    "logs": true
+    "bedrockRuntime": true,
+    "agentCore": true,
+    "stepFunctions": true,
+    "logs": true,
+    "s3": true
   },
-  "model": {
-    "s3Uri": ""
+  "digitization": {
+    "modelId": "us.openai.gpt-6.1-sol",
+    "allowedModelIds": [
+      "us.openai.gpt-6.1-sol",
+      "us.openai.gpt-6.1-terra",
+      "us.openai.gpt-6-astra",
+      "us.anthropic.claude-sonnet-5-5",
+      "global.anthropic.claude-opus-5-5"
+    ],
+    "review": {
+      "enabled": true,
+      "maxViews": 40
+    },
+    "dashedAsPiping": false,
+    "pdf": {
+      "dpi": 300,
+      "maxPages": 50
+    }
+  },
+  "orchestration": {
+    "maxConcurrentSheets": 4,
+    "sheetTimeoutMinutes": 120,
+    "uploadTrigger": {
+      "enabled": true,
+      "prefix": "drawings/"
+    }
   }
 }
