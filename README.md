@@ -262,6 +262,7 @@ To run the unit tests:
 
 ## Documentation
 
+- [How digitization works](docs/DIGITIZATION_PIPELINE.md): detect, trace and review stages; which steps are model calls
 - [Configuration](docs/CONFIGURATION.md): deployment and per-run settings, choosing a model, networking
 - [API reference](docs/API_REFERENCE.md): workflow input, Lambda and agent payloads, output formats, graph convention
 - [Troubleshooting](docs/TROUBLESHOOTING.md): model access, throttling, timeouts, failed sheets
