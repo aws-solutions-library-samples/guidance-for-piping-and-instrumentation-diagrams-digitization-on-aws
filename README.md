@@ -260,6 +260,8 @@ To run the unit tests:
 .venv/bin/python -m unittest discover tests
 ```
 
+From `cdk/`, `npm test` type-checks the CDK app and runs the same tests.
+
 ## Documentation
 
 - [How digitization works](docs/DIGITIZATION_PIPELINE.md): detect, trace and review stages; which steps are model calls
@@ -307,6 +309,12 @@ Customers are responsible for making their own independent assessment of the inf
 
 Model output can be wrong. Review digitized results before you rely on them for engineering,
 safety or operational decisions.
+
+## Contributing
+
+See [CONTRIBUTING](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). Report security
+issues through [AWS vulnerability reporting](https://aws.amazon.com/security/vulnerability-reporting/),
+not GitHub issues.
 
 ## License
 
