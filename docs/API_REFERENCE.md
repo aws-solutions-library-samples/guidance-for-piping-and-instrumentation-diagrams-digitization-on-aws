@@ -63,7 +63,7 @@ Output:
   "bucket": "<OutputBucketName>",
   "prefix": "<execution name>/",
   "source": { "bucket": "...", "key": "drawings/area-7.pdf", "versionId": "..." },
-  "config": { "modelId": "...", "review": { "enabled": true, "maxViews": 40 },
+  "config": { "modelId": "...", "detect": "tiled", "review": { "enabled": true, "maxViews": 40 },
               "dashedAsPiping": false, "pdf": { "dpi": 300, "maxPages": 50 } },
   "pages": [ { "sheetId": "area-7.p1", "pageKey": "<execution name>/pages/area-7.p1.png",
                "outputPrefix": "<execution name>/sheets/area-7.p1/" } ]
@@ -85,7 +85,8 @@ and the config. It calls `InvokeAgentRuntime` with a session ID derived from
   "pageKey": "<execution name>/pages/area-7.p1.png",
   "outputPrefix": "<execution name>/sheets/area-7.p1/",
   "sheetId": "area-7.p1",
-  "config": { "modelId": "...", "review": { "enabled": true, "maxViews": 40 }, "dashedAsPiping": false },
+  "config": { "modelId": "...", "detect": "tiled", "review": { "enabled": true, "maxViews": 40 },
+              "dashedAsPiping": false },
   "taskToken": "..."
 }
 ```
@@ -137,7 +138,7 @@ Output: `{"status": "SUCCEEDED" | "PARTIAL" | "FAILED", "sheets": {"total", "suc
               "items": ["T-101", "HV-101", "F3", "OP1"], "path": [[x, y], ...] } ],
   "connections": [ { "from": "T-101", "to": "HV-101", "kind": "process", "run": "R1" } ],
   "_usage": { "inputTokens": 0, "outputTokens": 0, "seconds": 0, "usd": 0.0, "model_id": "..." },
-  "_pipeline": { "tiles": 6, "raw_detections": 212, "items": 180, "runs": 64, "review": { } }
+  "_pipeline": { "detect": "tiled", "tiles": 6, "raw_detections": 212, "items": 180, "runs": 64, "review": { } }
 }
 ```
 
@@ -237,8 +238,10 @@ The sheet, scaled to at most 4096 px on its long edge, with the final result dra
 
 | File | Written by | Contents |
 |---|---|---|
-| `detect.json` | detect | Merged items with ids, tile count, raw detection count, token usage |
-| `trace.raw.txt`, `trace.json` | trace | The model's raw reply; the items and the traced runs |
+| `detect.json` | detect (tiled mode) | Merged items with ids, tile count, raw detection count, token usage |
+| `trace.raw.txt` | trace (tiled mode) | The model's raw reply |
+| `single.raw.txt` | single call (single mode) | The model's raw reply |
+| `trace.json` | trace or single call | The items and the traced runs, and which `detect` mode produced them |
 | `draft.json` | before review | The result before review, in the same format as `sheet.json` |
 | `review.json` | review | The agent's edit log and final message |
 

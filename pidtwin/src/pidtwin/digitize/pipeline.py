@@ -9,11 +9,12 @@ Pipeline, per sheet and model:
               attaches the line number printed along it.
   3. review - a Strands agent (same model) zooms into regions of the original with its current
               result overlaid and fixes items and runs until it is satisfied (see review.py).
-Connections are derived from the runs. The pre-review result is kept as draft.json; graph rule
+With detect "single", steps 1 and 2 are one call on the whole sheet (no tiling); review is optional
+either way. Connections are derived from the runs. The pre-review result is kept as draft.json; graph rule
 violations found in the draft (pidtwin.graph.validate) are handed to the review agent as hints.
 Artifacts go to a sink (artifacts.py): local files here, S3 when running in AgentCore Runtime.
 
-Usage: python -m pidtwin.digitize.pipeline [--no-review] [--resume] [--models sonnet,opus|all] [image|pdf ...]
+Usage: python -m pidtwin.digitize.pipeline [--detect tiled|single] [--no-review] [--resume] [--models sonnet,opus|all] [image|pdf ...]
        (default: GPT-6.1 Sol on every image in samples/; results in results/)
 Ground truth: samples/<name>.truth.json alongside the image (optional).
 """
@@ -128,6 +129,22 @@ Rules:
 """ + RUN_RULES + """
 - If you see a symbol missing from the list, add it under "added" (new id such as "X1") and use it.
 Use only ids from the list, from "added", run ids, or "END"."""
+
+SINGLE_PROMPT = """You are digitizing a Piping & Instrumentation Diagram (P&ID). The image is the full sheet.
+List EVERY drawn symbol and every text label attached to piping, and trace EVERY pipe and every
+instrument signal or impulse line. Return ONLY a JSON object, no prose:
+{"drawing": {"number": str|null, "revision": str|null, "title": str|null},
+ "items": [{"id": str, "category": "equipment"|"valve"|"instrument"|"fitting"|"offpage"|"line_label",
+            "type": str, "tag": str|null, "text": str|null, "bbox": BBOX}],
+ "runs": [{"id": "R1", "kind": "process"|"signal"|"impulse", "line_number": str|null,
+           "items": [ids in order along the run], "path": [[x, y], ...]}]}
+""" + BBOX_DOC + """
+Give every item a unique id (its tag when it has a unique one, else e.g. "V1", "F3").
+""" + CATEGORY_DOC + """
+Ignore the title block, notes and revision table.
+Run rules:
+""" + RUN_RULES + """
+Use only item ids from "items", run ids, or "END" in runs."""
 
 
 # ---------- model calls ----------
@@ -342,8 +359,26 @@ def trace(model_id, sheet, items, sink):
         if b and it.get("id") and it.get("category") in PREFIX:
             it["bbox"] = b
             items.append(it)
-    sink.save("trace.json", {"items": items, "traced": traced, "usage": usage, "seconds": secs})
+    sink.save("trace.json", {"items": items, "traced": traced, "usage": usage, "seconds": secs, "detect": "tiled"})
     return traced, usage, secs
+
+
+def single(model_id, sheet, sink):
+    """Detect and trace in one call on the whole sheet (fitted to TILE). Cheaper than detect + trace,
+    but small text is read at lower resolution. Saves trace.json in the same shape as trace()."""
+    out, text, usage, secs = call_json(model_id, [fit(sheet)], SINGLE_PROMPT)
+    sink.save("single.raw.txt", text)
+    out = out or {}
+    items, seen = [], {}
+    for it in out.get("items", []):
+        b = valid_box(it.get("bbox"))
+        if b and it.get("id") and it.get("category") in PREFIX:
+            iid = str(it["id"])
+            seen[iid] = seen.get(iid, 0) + 1
+            items.append({**it, "id": iid if seen[iid] == 1 else f"{iid}#{seen[iid]}", "bbox": b})
+    traced = {"drawing": out.get("drawing"), "runs": out.get("runs") or []}
+    sink.save("trace.json", {"items": items, "traced": traced, "usage": usage, "seconds": secs, "detect": "single"})
+    return items, traced, usage, secs
 
 
 def assemble(items, runs, drawing, image, size):
@@ -377,14 +412,23 @@ def add_usage(a, b):
     return {k: a.get(k, 0) + b.get(k, 0) for k in USAGE_KEYS}
 
 
-def run_pipeline(model_id, image, sheet, sink, review=True, max_views=None, dashed_as_piping=False, resume=False):
-    """Detect, trace and (optionally) review one sheet. With resume, stages whose artifact is already in
-    the sink (detect.json, trace.json) are loaded instead of re-run, so a retried sheet picks up where
-    it stopped."""
+def run_pipeline(model_id, image, sheet, sink, review=True, max_views=None, dashed_as_piping=False, resume=False,
+                 detect_mode="tiled"):
+    """Detect, trace and (optionally) review one sheet. detect_mode "tiled" runs tiled detect then
+    trace; "single" does both in one call on the whole sheet. With resume, stages whose artifact is
+    already in the sink (detect.json, trace.json) are loaded instead of re-run, so a retried sheet
+    picks up where it stopped."""
+    if detect_mode not in ("tiled", "single"):
+        raise ValueError(f"detect_mode must be 'tiled' or 'single', not {detect_mode!r}")
     done = sink.load_json("trace.json") if resume else None
+    if done and done.get("detect", "tiled") != detect_mode:
+        done = None  # saved by the other mode
     if done:
         items, traced, usage, secs = done["items"], done["traced"], done["usage"], done["seconds"]
-        meta = {"resumed_from": "trace"}
+        meta = {"detect": detect_mode, "resumed_from": "trace"}
+    elif detect_mode == "single":
+        items, traced, usage, secs = single(model_id, sheet, sink)
+        meta = {"detect": "single"}
     else:
         done = sink.load_json("detect.json") if resume else None
         if done:
@@ -393,7 +437,7 @@ def run_pipeline(model_id, image, sheet, sink, review=True, max_views=None, dash
             items, usage, s1, ntiles, nraw = detect(model_id, sheet, sink)
         traced, u2, s2 = trace(model_id, sheet, items, sink)
         usage, secs = add_usage(usage, u2), s1 + s2
-        meta = {"tiles": ntiles, "raw_detections": nraw}
+        meta = {"detect": "tiled", "tiles": ntiles, "raw_detections": nraw}
     runs, drawing = traced.get("runs", []), traced.get("drawing")
     meta.update(items=len(items), runs=len(runs))
     out = assemble(items, runs, drawing, image, sheet.size)
@@ -505,19 +549,20 @@ def report(name, out, usage, secs, truth, usd=None):
     return sc
 
 
-def run(image: Path, models, review, resume=False):
+def run(image: Path, models, review, resume=False, detect_mode="tiled"):
     sheet = Image.open(image)
     sheet.load()
     truth_path = image.with_name(image.stem + ".truth.json")
     truth = json.loads(truth_path.read_text()) if truth_path.exists() else None
-    print(f"\n### {image.name}  {sheet.size[0]}x{sheet.size[1]}  review={review}  "
+    print(f"\n### {image.name}  {sheet.size[0]}x{sheet.size[1]}  detect={detect_mode}  review={review}  "
           f"tiles={len(tile_boxes(*sheet.size))}  ({'with' if truth else 'no'} ground truth)", flush=True)
-    slug = lambda name: name.replace(" ", "_").replace(".", "")
+    slug = lambda name: name.replace(" ", "_").replace(".", "") + (".single" if detect_mode == "single" else "")
 
     summary = []
     with cf.ThreadPoolExecutor(len(models)) as ex:
         sinks = {name: LocalSink(f"results/{image.stem}.{slug(name)}.") for name in models}
-        futs = {name: ex.submit(run_pipeline, mid, image, sheet, sinks[name], review, resume=resume) for name, mid in models.items()}
+        futs = {name: ex.submit(run_pipeline, mid, image, sheet, sinks[name], review, resume=resume,
+                              detect_mode=detect_mode) for name, mid in models.items()}
         for name, fut in futs.items():
             try:
                 out, usage, secs = fut.result()
@@ -541,6 +586,8 @@ def run(image: Path, models, review, resume=False):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("images", nargs="*")
+    ap.add_argument("--detect", choices=("tiled", "single"), default="tiled",
+                    help="tiled detect + trace (default), or one call on the whole sheet")
     ap.add_argument("--no-review", action="store_true", help="skip the Strands review agent")
     ap.add_argument("--models", default=DEFAULT_MODEL,
                     help=f"comma-separated substrings of model names, e.g. sonnet,opus, or all (default: {DEFAULT_MODEL})")
@@ -561,4 +608,4 @@ if __name__ == "__main__":
         else:
             pages.append(im)
     for im in pages:
-        run(im, models, not a.no_review, a.resume)
+        run(im, models, not a.no_review, a.resume, a.detect)

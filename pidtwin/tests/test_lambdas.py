@@ -16,7 +16,7 @@ from PIL import Image
 LAMBDA = Path(__file__).resolve().parents[2] / "cdk" / "lambda"
 SHEET = json.loads((Path(__file__).parent / "data" / "synthetic.sonnet.digitized.json").read_text())
 ALLOWED = ["us.anthropic.claude-sonnet-5-5", "us.openai.gpt-6.1-sol"]
-DEFAULTS = {"modelId": ALLOWED[0], "review": {"enabled": True, "maxViews": 40}, "dashedAsPiping": False,
+DEFAULTS = {"modelId": ALLOWED[0], "detect": "tiled", "review": {"enabled": True, "maxViews": 40}, "dashedAsPiping": False,
             "pdf": {"dpi": 150, "maxPages": 5}}
 
 
@@ -92,6 +92,7 @@ class PrepareInput(unittest.TestCase):
         self.mod.s3.objects["in", "fake.png"] = b"not a png"
         bad = [({"key": "a.png", "config": {"modelId": "us.example.unlisted-model"}}, "not allowed"),
                ({"key": "a.png", "config": {"review": {"maxViews": 0}}}, "maxViews"),
+               ({"key": "a.png", "config": {"detect": "fast"}}, "detect"),
                ({"key": "a.docx"}, "unsupported"),
                ({"key": "missing.png"}, "not found"),
                ({"key": "a.png", "bucket": "elsewhere"}, "input bucket"),

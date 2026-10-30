@@ -51,6 +51,8 @@ def check_config(cfg):
     if cfg.get("modelId") not in ALLOWED_MODEL_IDS:
         raise InputError(f"modelId {cfg.get('modelId')!r} is not allowed; choose one of {ALLOWED_MODEL_IDS} "
                          "(the list is set by digitization.allowedModelIds in cdk/config.json)")
+    if cfg.get("detect") not in ("tiled", "single"):
+        raise InputError("detect must be \"tiled\" or \"single\"")
     views = cfg["review"].get("maxViews")
     if not isinstance(views, int) or not 1 <= views <= 200:
         raise InputError("review.maxViews must be an integer from 1 to 200")

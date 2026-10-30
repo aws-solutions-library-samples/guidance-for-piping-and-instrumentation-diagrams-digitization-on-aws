@@ -7,7 +7,7 @@ SendTaskSuccess / SendTaskFailure when done.
 
 Payload:
   {"bucket": "...", "pageKey": "<exec>/pages/x.png", "outputPrefix": "<exec>/sheets/x/",
-   "sheetId": "x", "config": {"modelId": ..., "review": {"enabled": true, "maxViews": 40},
+   "sheetId": "x", "config": {"modelId": ..., "detect": "tiled", "review": {"enabled": true, "maxViews": 40},
    "dashedAsPiping": false}, "taskToken": "..."}
 Without taskToken the sheet is digitized synchronously and the summary returned (local testing only:
 a long synchronous call blocks the ping endpoint).
@@ -54,7 +54,7 @@ def digitize(payload):
     result = digitize_sheet(sheet, S3Sink(bucket, payload["outputPrefix"], s3), model_id, payload["sheetId"],
                             image_ref=f"s3://{bucket}/{payload['pageKey']}",
                             review=review.get("enabled", True), max_views=review.get("maxViews"),
-                            dashed_as_piping=cfg.get("dashedAsPiping", False))
+                            dashed_as_piping=cfg.get("dashedAsPiping", False), detect=cfg.get("detect", "tiled"))
     return {**result, "status": "SUCCEEDED", "outputPrefix": payload["outputPrefix"]}
 
 

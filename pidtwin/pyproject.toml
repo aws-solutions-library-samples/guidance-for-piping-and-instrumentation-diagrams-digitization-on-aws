@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pidtwin"
-version = "2.0.0"
+version = "2.1.0"
 description = "Digitize P&IDs into plant graphs with Amazon Bedrock models"
 requires-python = ">=3.12"
 license = "MIT-0"

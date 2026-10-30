@@ -23,6 +23,7 @@
       "us.anthropic.claude-sonnet-5-5",
       "global.anthropic.claude-opus-5-5"
     ],
+    "detect": "tiled",
     "review": {
       "enabled": true,
       "maxViews": 40

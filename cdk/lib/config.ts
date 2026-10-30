@@ -6,6 +6,8 @@ import { EndpointFlags } from './constructs/networking';
 export interface DigitizationConfig {
   modelId: string;
   allowedModelIds: string[];
+  /** "tiled": tiled detect then trace; "single": one call on the whole sheet. */
+  detect: 'tiled' | 'single';
   review: { enabled: boolean; maxViews: number };
   dashedAsPiping: boolean;
   pdf: { dpi: number; maxPages: number };

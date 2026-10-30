@@ -40,15 +40,19 @@ export function pythonBundle(opts: PythonBundleOptions): { path: string; options
   };
   const rel = path.relative(ROOT, opts.sourceDir);
   const dockerSteps = [
-    ...(hasRequirements ? [`pip install -r ${rel}/requirements.txt -t /asset-output --only-binary=:all:`] : []),
+    ...(hasRequirements
+      ? [`pip install -r ${rel}/requirements.txt -t /asset-output --only-binary=:all: --no-compile`]
+      : []),
     `cp -r ${rel}/. /asset-output/`,
     'rm -f /asset-output/requirements.txt',
     ...(opts.includePidtwin ? ['cp -r pidtwin/src/pidtwin /asset-output/pidtwin'] : []),
+    // local __pycache__ dirs (any Python version) make AgentCore reject the artifact
+    "find /asset-output -name __pycache__ -type d -prune -exec rm -rf {} +",
   ];
   const options: cdk.AssetOptions = {
     // hash the inputs, not the output, so unchanged code does not re-upload
     assetHashType: cdk.AssetHashType.CUSTOM,
-    assetHash: hashInputs([opts.sourceDir, ...(opts.includePidtwin ? [PIDTWIN_SRC] : [])]),
+    assetHash: hashInputs([opts.sourceDir, ...(opts.includePidtwin ? [PIDTWIN_SRC] : [])], dockerSteps.join('\n')),
     bundling: {
       image: cdk.DockerImage.fromRegistry(`public.ecr.aws/sam/build-python${PYTHON_VERSION}:latest-arm64`),
       platform: 'linux/arm64',
@@ -79,9 +83,10 @@ export function pythonBundle(opts: PythonBundleOptions): { path: string; options
   return { path: ROOT, options };
 }
 
-function hashInputs(dirs: string[]): string {
+function hashInputs(dirs: string[], recipe: string): string {
   const crypto = require('crypto') as typeof import('crypto');
   const h = crypto.createHash('sha256');
+  h.update(recipe); // a change to how the bundle is built re-bundles it
   const walk = (p: string) => {
     for (const f of fs.readdirSync(p).sort()) {
       if (f === '__pycache__' || f.endsWith('.pyc')) continue;
