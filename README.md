@@ -334,8 +334,8 @@ aws logs delete-log-group --log-group-name <name>
 This Guidance reports two things to AWS, both built from `solution.json` at the repository root:
 
 - **Deployments.** The application stack's CloudFormation description is
-  `(<id>) - <solution name>. Version <version>`; the network stack carries `(<id>-network)` so one
-  installation is counted once.
+  `(<id>) (<secondary id>) - <solution name>. Version <version>`; the network stack carries
+  `(<id>-network) (<secondary id>-network)` so one installation is counted once.
 - **API usage.** AWS SDK calls made by the agent runtime, the Lambdas and the local digitizer add
   `AWSSOLUTION/<id>/<version>` to their `User-Agent` header.
 

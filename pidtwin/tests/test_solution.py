@@ -30,6 +30,11 @@ REPO = solution.CONFIG_PATH.parent
 CDK = REPO / "cdk"
 
 
+def idents(suffix=""):
+    """The parenthesised ids a description starts with: primary first, then each secondary."""
+    return " ".join(f"({i}{suffix})" for i in [solution.SOLUTION_ID, *solution.SECONDARY_IDS])
+
+
 class _Intercept(Exception):
     """Carries the request headers up out of botocore's send path."""
 
@@ -163,8 +168,7 @@ class StackDescriptionTest(unittest.TestCase):
     def test_shape(self):
         """The no-component form is what the application stack deploys."""
         desc = solution.stack_description()
-        self.assertEqual(desc, f"({solution.SOLUTION_ID}) - {solution.SOLUTION_NAME}. "
-                               f"Version {solution.SOLUTION_VERSION}")
+        self.assertEqual(desc, f"{idents()} - {solution.SOLUTION_NAME}. Version {solution.SOLUTION_VERSION}")
         # deployment counting matches on the literal '(SO' prefix
         self.assertTrue(desc.startswith("(SO"), desc)
         # no dangling separator or a stray 'None' where the component would go
@@ -176,17 +180,31 @@ class StackDescriptionTest(unittest.TestCase):
 
     def test_with_a_component(self):
         desc = solution.stack_description("test component")
-        self.assertEqual(desc, f"({solution.SOLUTION_ID}) - {solution.SOLUTION_NAME} - test component. "
+        self.assertEqual(desc, f"{idents()} - {solution.SOLUTION_NAME} - test component. "
                                f"Version {solution.SOLUTION_VERSION}")
 
     def test_id_suffix_keeps_one_bare_id_per_install(self):
         supporting = solution.stack_description("network", id_suffix="network")
-        self.assertTrue(supporting.startswith(f"({solution.SOLUTION_ID}-network)"), supporting)
-        self.assertNotIn(f"({solution.SOLUTION_ID})", supporting)
+        self.assertTrue(supporting.startswith(f"{idents('-network')} - "), supporting)
+        # no bare id at all, primary or secondary: each would double-count its own solution
+        for sid in [solution.SOLUTION_ID, *solution.SECONDARY_IDS]:
+            self.assertNotIn(f"({sid})", supporting)
         # '' included: passed through, a supporting stack would silently carry the bare id and double-count
         for bad in ("has space", "under_score", ""):
             with self.assertRaises(ValueError, msg=bad):
                 solution.stack_description("x", id_suffix=bad)
+
+    def test_secondary_ids_are_in_the_description_but_not_the_user_agent(self):
+        self.assertTrue(solution.SECONDARY_IDS, "solution.json lists no secondary_ids")
+        desc = solution.stack_description()
+        for sid in solution.SECONDARY_IDS:
+            self.assertIn(f"({sid})", desc)
+            self.assertNotIn(sid, solution.user_agent_string())
+
+    def test_malformed_secondary_ids_block_a_deploy(self):
+        for bad in ("SO0378", ["S0378"], [0], [solution.SOLUTION_ID]):
+            with mock.patch.object(solution, "SECONDARY_IDS", bad), self.assertRaises(ValueError, msg=bad):
+                solution.stack_description()
 
     def test_over_the_cloudformation_cap_raises(self):
         """1024 bytes is a hard CloudFormation limit; failing at synth beats failing at deploy, and beats
@@ -283,7 +301,7 @@ class SingleSourceTest(unittest.TestCase):
             if not rel or path.name in skip:
                 continue
             if path.suffix in {".py", ".json", ".sh", ".yaml", ".ts"}:
-                banned = (solution.SOLUTION_ID, solution.SOLUTION_VERSION, "AWSSOLUTION/")
+                banned = (solution.SOLUTION_ID, *solution.SECONDARY_IDS, solution.SOLUTION_VERSION, "AWSSOLUTION/")
             elif path.suffix == ".md":
                 banned = (solution.SOLUTION_VERSION,)
             else:
