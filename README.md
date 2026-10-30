@@ -42,7 +42,8 @@ a plant graph through off-page connectors and shared equipment tags.
 
 This replaces version 1 of this Guidance, which combined three separate components: a trained
 symbol detector on a SageMaker endpoint, Bedrock Data Automation for OCR, and OpenCV line
-detection. The new approach needs no training data and no always-on endpoint. You can still get the
+detection. The new approach needs no training data and no always-on endpoint, and it is far more
+accurate (see [Compared with version 1](#compared-with-version-1)). You can still get the
 v1 code and model from the [v1.0.0 release](https://github.com/aws-solutions-library-samples/guidance-for-piping-and-instrumentation-diagrams-digitization-on-aws/releases/tag/v1.0.0).
 
 ## Architecture
@@ -120,6 +121,30 @@ half as much as Sol for slightly weaker tracing.
 
 Results on your drawings will differ. Before you choose a model, score a few of your own sheets
 with the local scorer (see [Run locally](#run-locally)).
+
+### Compared with version 1
+
+Version 1 (tag `v1.1.0`, model from the v1.0.0 release) was run on the same 10 sheets and scored
+against the same keys:
+
+| Pipeline | Label accuracy (F1) | Valve tags P / R | Instruments P / R | Line numbers P / R | Connections P / R | Connections F1 |
+|---|---|---|---|---|---|---|
+| Version 2, GPT-6.1 Sol (default) | **99%** | 99% / 99% | 97% / 96% | 99% / 99% | 90% / 88% | **89%** |
+| Version 1 | 74% | 98% / 72% | 0% / 0% | 100% / 92% | 11% / 35% | 17% |
+
+- Version 1 ran with its default settings, except that the notes boundary was given as
+  `manual_coordinates` (the drawing area inside the frame, left of the notes column). Its automatic
+  notes detection cut off part of the drawing on these sheets.
+- Instruments score 0% because the version 1 symbol model has no class for ISA instrument bubbles.
+  It finds the bubbles but labels them as pumps or valves.
+- Version 1 reads valve tags and line numbers accurately when it finds them. Most of its lost
+  recall is valves it misses, or tags it attaches to a neighbouring symbol or line.
+- Connections are weak mainly because pipe crossings are treated as junctions and nearby symbols
+  are linked even when no pipe joins them. Counting only whether the right positions are linked,
+  whatever the component type, version 1 reaches 24% precision and 79% recall.
+- To score version 1 with the same scorer, its graph output was converted to the version 2 format.
+  The conversion keeps only associated text that looks like a valve tag or a line number, which
+  favours version 1.
 
 ## Cost
 
