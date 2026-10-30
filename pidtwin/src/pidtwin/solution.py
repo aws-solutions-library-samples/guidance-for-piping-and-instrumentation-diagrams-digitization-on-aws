@@ -8,9 +8,10 @@ release means editing one file and nothing else:
      ``Description``, which must carry the solution id — ``SO`` and digits —
      in parentheses:
 
-         (<id>) - <solution name>. Version <version>
+         (<id>) (<secondary id>) - <solution name>. Version <version>
 
-     The CDK app is TypeScript, so it builds the description with
+     with one parenthesised id per entry in ``secondary_ids`` (optional). The
+     secondary ids are reported here only, not in the user agent. The CDK app is TypeScript, so it builds the description with
      ``cdk/lib/solution.ts``, a port of ``stack_description()`` below;
      ``tests/test_solution.py`` checks that the two agree.
 
@@ -89,6 +90,8 @@ def identity() -> dict:
 SOLUTION_ID = identity().get("id", "")
 SOLUTION_NAME = identity().get("name", "")
 SOLUTION_VERSION = identity().get("version", "")
+# reported in stack descriptions only, not in the user agent
+SECONDARY_IDS = identity().get("secondary_ids", [])
 
 
 def user_agent_string() -> str:
@@ -171,10 +174,11 @@ def stack_description(component: str | None = None,
                       id_suffix: str | None = None) -> str:
     """Build a CloudFormation ``Description`` that deployment counting matches.
 
-        (<id>) - <solution name>. Version <version>
-        (<id>) - <solution name> - <component>. Version <version>
+        (<id>) (<secondary id>) - <solution name>. Version <version>
+        (<id>) (<secondary id>) - <solution name> - <component>. Version <version>
 
-    Both forms are counted; the id in parentheses is the whole signal. Pass
+    Both forms are counted; the ids in parentheses are the whole signal, one
+    per entry in ``secondary_ids`` after the primary. Pass
     ``component`` only to tell several stacks of one solution apart in the
     CloudFormation console — with a single stack the name already says it, and
     a restated summary of the resources just goes stale.
@@ -183,7 +187,8 @@ def stack_description(component: str | None = None,
     bare id would make one install count as N, so only the stack at the top of
     the dependency graph (the one that consumes the others, since a foundation
     stack can survive an abandoned deploy) omits it, and each supporting stack
-    passes its own — ``(<id>-network)`` for the network stack here.
+    passes its own, applied to every id —
+    ``(<id>-network) (<secondary id>-network)`` for the network stack here.
 
     Standalone templates that are not part of an install must not be given a
     description from here at all, or they inflate the deployment count.
@@ -195,12 +200,19 @@ def stack_description(component: str | None = None,
             f"id={SOLUTION_ID!r}, name={SOLUTION_NAME!r}, "
             f"version={SOLUTION_VERSION!r}). Deploying without the id in the "
             f"description means the stack is never counted as an install.")
-    if not re.fullmatch(r"SO\d+", SOLUTION_ID):
-        raise ValueError(
-            f"solution id {SOLUTION_ID!r} is not of the form SO<digits>; "
-            f"deployment counting matches on the literal '(SO' prefix, so a "
-            f"differently-shaped id is silently never counted")
-    ident = SOLUTION_ID
+    if not isinstance(SECONDARY_IDS, list):
+        raise ValueError(f"'secondary_ids' in {CONFIG_PATH} must be a list, "
+                         f"got {type(SECONDARY_IDS).__name__}")
+    ids = [SOLUTION_ID, *SECONDARY_IDS]
+    for sid in ids:
+        if not (isinstance(sid, str) and re.fullmatch(r"SO\d+", sid)):
+            raise ValueError(
+                f"solution id {sid!r} is not of the form SO<digits>; "
+                f"deployment counting matches on the literal '(SO' prefix, so "
+                f"a differently-shaped id is silently never counted")
+    if len(set(ids)) != len(ids):
+        raise ValueError(f"solution ids repeat in {CONFIG_PATH}: {ids}")
+    suffix = ""
     # `is not None`, not truthiness: id_suffix='' must hit the regex and be
     # rejected — passing it through would silently emit the bare id from a
     # supporting stack, the exact double-count this parameter exists to stop.
@@ -208,12 +220,13 @@ def stack_description(component: str | None = None,
         if not re.fullmatch(r"[A-Za-z0-9-]+", id_suffix):
             raise ValueError(f"stack id suffix {id_suffix!r} must match "
                              f"[A-Za-z0-9-]+")
-        ident = f"{SOLUTION_ID}-{id_suffix}"
+        suffix = f"-{id_suffix}"
     # '' / whitespace-only mean "no component", not an empty label — a blank
     # would otherwise emit a dangling " - ." separator.
     component = (component or "").strip() or None
     subject = f"{SOLUTION_NAME} - {component}" if component else SOLUTION_NAME
-    desc = f"({ident}) - {subject}. Version {SOLUTION_VERSION}"
+    idents = " ".join(f"({sid}{suffix})" for sid in ids)
+    desc = f"{idents} - {subject}. Version {SOLUTION_VERSION}"
     size = len(desc.encode("utf-8"))
     if size > _DESCRIPTION_MAX_BYTES:
         what = ("component text" if component
