@@ -7,6 +7,7 @@ import { Construct } from 'constructs';
 import { NagSuppressions } from 'cdk-nag';
 import * as path from 'path';
 import { pythonBundle } from '../bundling';
+import { userAgentEnvironment } from '../solution';
 
 export interface DigitizerAgentProps {
   outputBucket: s3.IBucket;
@@ -69,6 +70,7 @@ export class DigitizerAgent extends Construct {
         ALLOWED_MODEL_IDS: JSON.stringify(props.allowedModelIds),
         HEARTBEAT_SECONDS: String(props.heartbeatSeconds),
         LOG_LEVEL: 'INFO',
+        ...userAgentEnvironment(),
       },
     });
 

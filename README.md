@@ -18,6 +18,7 @@ model in three steps: detect, trace, then an agent that reviews its own result.
 - [Run locally](#run-locally)
 - [Documentation](#documentation)
 - [Cleanup](#cleanup)
+- [Solution metrics](#solution-metrics)
 - [Notices](#notices)
 
 ## Overview
@@ -327,6 +328,26 @@ aws logs describe-log-groups --log-group-name-prefix /aws/bedrock-agentcore/runt
   --query 'logGroups[].logGroupName' --output text
 aws logs delete-log-group --log-group-name <name>
 ```
+
+## Solution metrics
+
+This Guidance reports two things to AWS, both built from `solution.json` at the repository root:
+
+- **Deployments.** The application stack's CloudFormation description is
+  `(<id>) - <solution name>. Version <version>`; the network stack carries `(<id>-network)` so one
+  installation is counted once.
+- **API usage.** AWS SDK calls made by the agent runtime, the Lambdas and the local digitizer add
+  `AWSSOLUTION/<id>/<version>` to their `User-Agent` header.
+
+Neither contains anything about you, your account or your drawings: the id and version are the same
+for everyone who deploys this repository, and no resource tags are involved. To opt out, delete the
+`solution` block from `solution.json`. SDK calls then go out without the suffix, and the CDK app
+refuses to synthesize until you give both stacks a `description` of your own in `cdk/app.ts`.
+
+Not covered: `aws` CLI commands (including the ones in this README), because the CLI has no way to
+add a user-agent suffix; the helper Lambdas CDK generates (bucket auto-delete, bucket notifications,
+default security group cleanup); and calls AWS services make on the pipeline's behalf (Step Functions
+service integrations, the S3 upload trigger).
 
 ## Notices
 

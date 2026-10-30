@@ -17,16 +17,16 @@ import tempfile
 from pathlib import Path
 from urllib.parse import unquote_plus
 
-import boto3
 from botocore.exceptions import ClientError
 from PIL import Image
 
 from pidtwin.digitize.pdf import render
+from pidtwin.solution import get_client
 
 log = logging.getLogger()
 log.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
 
-s3 = boto3.client("s3")
+s3 = get_client("s3")
 INPUT_BUCKET = os.environ["INPUT_BUCKET"]
 OUTPUT_BUCKET = os.environ["OUTPUT_BUCKET"]
 DEFAULT_CONFIG = json.loads(os.environ["DEFAULT_CONFIG"])

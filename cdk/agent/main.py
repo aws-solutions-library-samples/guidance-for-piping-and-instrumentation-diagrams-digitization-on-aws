@@ -18,12 +18,12 @@ import logging
 import os
 import threading
 
-import boto3
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from PIL import Image
 
 from pidtwin.digitize.artifacts import S3Sink
 from pidtwin.digitize.job import digitize_sheet
+from pidtwin.solution import get_client
 
 Image.MAX_IMAGE_PIXELS = 400_000_000  # PrepareInput caps rendered pages at 20,000 px per side
 
@@ -31,8 +31,8 @@ log = logging.getLogger("digitizer")
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 
 app = BedrockAgentCoreApp()
-s3 = boto3.client("s3")
-sfn = boto3.client("stepfunctions")
+s3 = get_client("s3")
+sfn = get_client("stepfunctions")
 HEARTBEAT_SECONDS = int(os.environ.get("HEARTBEAT_SECONDS", "60"))
 ALLOWED_MODEL_IDS = set(json.loads(os.environ.get("ALLOWED_MODEL_IDS", "[]")))
 OUTPUT_BUCKET = os.environ.get("OUTPUT_BUCKET")

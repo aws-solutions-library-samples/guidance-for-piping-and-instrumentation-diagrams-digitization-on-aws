@@ -14,11 +14,14 @@ import logging
 import os
 
 import boto3
+from botocore.config import Config
 
 log = logging.getLogger()
 log.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
 
-agentcore = boto3.client("bedrock-agentcore")
+# bundled without pidtwin, so the solution user-agent token comes straight from the environment the CDK app
+# sets (pidtwin/src/pidtwin/solution.py explains the token)
+agentcore = boto3.client("bedrock-agentcore", config=Config(user_agent_extra=os.environ.get("USER_AGENT_STRING", "")))
 RUNTIME_ARN = os.environ["AGENT_RUNTIME_ARN"]
 
 

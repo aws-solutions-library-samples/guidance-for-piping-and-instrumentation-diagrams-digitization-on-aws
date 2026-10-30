@@ -1,0 +1,8 @@
+{
+  "solution": {
+    "_comment": "AWS Solution identity: the single source of truth for both reporting mechanisms, the CloudFormation stack Description (deployment counting) and the AWS SDK User-Agent suffix (API usage attribution). Not a per-run knob: bump 'version' when cutting a release and otherwise leave it alone. Read only by cdk/lib/solution.ts and pidtwin/src/pidtwin/solution.py, always from this file, never from cdk/config.json. See those two files for the exact formats.",
+    "id": "SO9623",
+    "name": "Guidance for Piping and Instrumentation Diagrams Digitization on AWS",
+    "version": "v2.0.0"
+  }
+}

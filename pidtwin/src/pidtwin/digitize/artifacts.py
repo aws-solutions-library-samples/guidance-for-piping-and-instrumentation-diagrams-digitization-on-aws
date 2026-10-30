@@ -54,9 +54,9 @@ class LocalSink(Sink):
 
 class S3Sink(Sink):
     def __init__(self, bucket, prefix, client=None):
-        import boto3
+        from ..solution import get_client
         self.bucket, self.prefix = bucket, prefix
-        self.s3 = client or boto3.client("s3")
+        self.s3 = client or get_client("s3")
 
     def save(self, name, data):
         key = self.prefix + name

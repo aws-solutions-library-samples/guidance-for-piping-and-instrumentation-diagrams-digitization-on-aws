@@ -27,11 +27,11 @@ import re
 import time
 from pathlib import Path
 
-import boto3
 from botocore.config import Config
 from PIL import Image, ImageDraw, ImageFont
 
 from ..common import _along, centre, derive_connections, norm  # noqa: F401 (re-exported)
+from ..solution import get_client, solution_config
 from .artifacts import LocalSink
 
 REGION = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-east-1"
@@ -65,8 +65,9 @@ TILE = 2576       # Claude 5.x long-edge limit; anything larger is downscaled by
 OVERLAP = 0.12    # fraction of a tile step shared with each neighbour
 MAX_BYTES = 3_500_000  # stay under Bedrock's per-image size limit
 
-BOTO_CONFIG = Config(read_timeout=900, retries={"max_attempts": 6, "mode": "adaptive"})
-brt = boto3.client("bedrock-runtime", region_name=REGION, config=BOTO_CONFIG)
+# carries the solution user-agent token, so the review agent's Strands BedrockModel (review.py) is attributed too
+BOTO_CONFIG = solution_config(Config(read_timeout=900, retries={"max_attempts": 6, "mode": "adaptive"}))
+brt = get_client("bedrock-runtime", BOTO_CONFIG, region_name=REGION)
 
 BBOX_DOC = """BBOX = [x_min, y_min, x_max, y_max] in normalized coordinates 0-1000 on both axes, where
 (0,0) is the top-left corner of the image and (1000,1000) the bottom-right."""

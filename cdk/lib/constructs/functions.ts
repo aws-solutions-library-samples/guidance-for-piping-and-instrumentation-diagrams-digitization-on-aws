@@ -9,6 +9,7 @@ import { NagSuppressions } from 'cdk-nag';
 import * as path from 'path';
 import { pythonBundle } from '../bundling';
 import { DigitizationConfig, digitizationDefaults } from '../config';
+import { userAgentEnvironment } from '../solution';
 
 export interface FunctionsConstructProps {
   inputBucket: s3.IBucket;
@@ -42,7 +43,7 @@ export class FunctionsConstruct extends Construct {
         }),
         ...(props.vpcConfig ?? {}),
         ...extra,
-        environment: { LOG_LEVEL: 'INFO', ...(extra.environment ?? {}) },
+        environment: { LOG_LEVEL: 'INFO', ...userAgentEnvironment(), ...(extra.environment ?? {}) },
       });
       if (!props.vpcConfig) {
         NagSuppressions.addResourceSuppressions(fn, [{

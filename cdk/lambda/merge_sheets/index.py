@@ -10,18 +10,17 @@ import json
 import logging
 import os
 
-import boto3
-
 from pidtwin.graph.dexpi import to_proteus
 from pidtwin.graph.dot import to_dot
 from pidtwin.graph.merge import merge
 from pidtwin.graph.schema import Graph
 from pidtwin.graph.validate import summary as issue_summary, validate
+from pidtwin.solution import get_client
 
 log = logging.getLogger()
 log.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
 
-s3 = boto3.client("s3")
+s3 = get_client("s3")
 USAGE_KEYS = ("inputTokens", "outputTokens", "cacheWriteInputTokens", "cacheReadInputTokens")
 
 

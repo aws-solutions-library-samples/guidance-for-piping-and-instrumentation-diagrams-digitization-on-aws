@@ -5,6 +5,7 @@ import { PNIDNetworkStack } from "./lib/network-stack";
 import { PNIDDigitizationStack } from "./lib/pnid-digitization-stack";
 import { AwsSolutionsChecks } from "cdk-nag";
 import { PrototypeSecurityNagPack } from "./lib/prototype-security";
+import { stackDescription } from "./lib/solution";
 
 const app = new cdk.App();
 
@@ -31,12 +32,12 @@ const stackName = process.env.CDK_STACK_NAME || "PNIDDigitization";
 const config = loadConfig();
 const network = new PNIDNetworkStack(app, `${stackName}-Network`, config, {
   env,
-  description: "SO9623 - Agentic P&ID digitization: VPC, subnets and VPC endpoints",
+  // a supporting stack: its own id suffix, so one install is counted once (lib/solution.ts)
+  description: stackDescription("network", "network"),
 });
 new PNIDDigitizationStack(app, stackName, {
   env,
-  description:
-    "SO9623 - Agentic P&ID digitization with Amazon Bedrock and Bedrock AgentCore",
+  description: stackDescription(),
   config,
   networking: network.networking,
 });
