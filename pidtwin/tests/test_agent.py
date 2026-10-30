@@ -15,7 +15,8 @@ from PIL import Image
 
 AGENT = Path(__file__).resolve().parents[2] / "cdk" / "agent" / "main.py"
 PAYLOAD = {"bucket": "out", "pageKey": "ex/pages/a.png", "outputPrefix": "ex/sheets/a/", "sheetId": "a",
-           "config": {"modelId": "us.anthropic.claude-sonnet-5-5", "review": {"enabled": False, "maxViews": 5}},
+           "config": {"modelId": "us.anthropic.claude-sonnet-5-5", "detect": "single",
+                      "review": {"enabled": False, "maxViews": 5}},
            "taskToken": "tok"}
 
 
@@ -41,7 +42,7 @@ class Callbacks(unittest.TestCase):
             task = mod.app.add_async_task("t")
             mod._background(dict(PAYLOAD), task)
         kwargs = dz.call_args.kwargs
-        self.assertEqual((kwargs["review"], kwargs["max_views"]), (False, 5))
+        self.assertEqual((kwargs["review"], kwargs["max_views"], kwargs["detect"]), (False, 5, "single"))
         out = json.loads(mod.sfn.send_task_success.call_args.kwargs["output"])
         self.assertEqual((out["status"], out["outputPrefix"]), ("SUCCEEDED", "ex/sheets/a/"))
         mod.sfn.send_task_failure.assert_not_called()

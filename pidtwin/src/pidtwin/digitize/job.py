@@ -2,7 +2,7 @@
 Runtime entrypoint (cdk/agent/main.py) with an S3Sink, and usable locally with a LocalSink.
 
 Artifacts written to the sink:
-  detect.json, trace.json, trace.raw.txt, draft.json, review.json   intermediate stages
+  detect.json, trace.json, trace.raw.txt (or single.raw.txt), draft.json, review.json   intermediate stages
   sheet.json      digitizer result (items, runs, connections, usage)
   graph.json      sheet graph (pidtwin.graph.schema)
   issues.json     rule violations still present after review
@@ -20,10 +20,11 @@ OVERLAY_SIDE = 4096  # long edge of overlay.png
 
 
 def digitize_sheet(sheet, sink, model_id, sheet_id, image_ref=None, review=True, max_views=None,
-                   dashed_as_piping=False, resume=True):
+                   dashed_as_piping=False, resume=True, detect="tiled"):
     """sheet: PIL image. Returns a small summary (counts, issues, usage, cost) for the orchestrator."""
     out, usage, secs = run_pipeline(model_id, image_ref or sheet_id, sheet, sink, review=review,
-                                    max_views=max_views, dashed_as_piping=dashed_as_piping, resume=resume)
+                                    max_views=max_views, dashed_as_piping=dashed_as_piping, resume=resume,
+                                    detect_mode=detect)
     usd = cost(model_id, usage)
     out["_usage"] = {**usage, "seconds": round(secs), "usd": usd, "model_id": model_id}
     sink.save("sheet.json", out)

@@ -19,6 +19,7 @@ There are two levels of settings:
     "modelId": "us.openai.gpt-6.1-sol",
     "allowedModelIds": ["us.openai.gpt-6.1-sol", "us.openai.gpt-6.1-terra", "us.openai.gpt-6-astra",
                         "us.anthropic.claude-sonnet-5-5", "global.anthropic.claude-opus-5-5"],
+    "detect": "tiled",
     "review": { "enabled": true, "maxViews": 40 },
     "dashedAsPiping": false,
     "pdf": { "dpi": 300, "maxPages": 50 }
@@ -39,16 +40,49 @@ These are the deployed defaults. Every key except `allowedModelIds` can be overr
 |---|---|---|
 | `modelId` | `us.openai.gpt-6.1-sol` | Bedrock model or inference profile used for all three steps. It must be in `allowedModelIds`. |
 | `allowedModelIds` | five models, see above | The models a run may ask for. The agent's IAM role can invoke only these, and PrepareInput and the agent both reject any other model. Changing the list needs a redeploy. |
+| `detect` | `tiled` | How symbols are found and lines traced. `tiled` reads the sheet in overlapping tiles at full resolution, then traces lines in a second call. `single` does both in one call on the whole sheet, scaled to 2,576 px on the long edge. See [Choosing a mode](#choosing-a-mode). |
 | `review.enabled` | `true` | Run the review agent after detect and trace. When it is off, the run is faster and cheaper but less accurate. |
 | `review.maxViews` | `40` | How many zoomed views the review agent may request (1–200). Dense or large sheets benefit from more. |
 | `dashedAsPiping` | `false` | Treat every dashed line as piping, for drawing sets whose notes say dotted lines are alternate routes. Even when this is off, a dashed line that carries a line number, or that piping tees into, is treated as piping, and `issues.json` lists it. |
 | `pdf.dpi` | `300` | Resolution used to render PDF pages. Pages are capped at 20,000 px per side. |
 | `pdf.maxPages` | `50` | Reject PDFs with more pages than this. |
 
+### Choosing a mode
+
+`detect` and `review.enabled` together give three modes:
+
+| Mode | Settings | What runs |
+|---|---|---|
+| Tiled (default) | `"detect": "tiled"`, review on | Tiled detect, trace, review agent |
+| Single + review | `"detect": "single"`, review on | One call on the whole sheet, then the review agent |
+| Single | `"detect": "single"`, review off | One call on the whole sheet |
+
+On the 10-sheet benchmark in the [README](../README.md#detection-modes), with the models that suit
+each mode:
+
+| Mode and model | Label accuracy (F1) | Connections F1 | Cost per sheet |
+|---|---|---|---|
+| Tiled, GPT-6.1 Sol (default) | 99% | 89% | $1.24 |
+| Single + review, GPT-6.1 Sol | 96% | 89% | $0.42 |
+| Single + review, GPT-6.1 Terra | 99% | 85% | $0.20 |
+| Single + review, Claude Opus 5.5 | 98% | 89% | $3.45 |
+| Single, GPT-6 Astra | 95% | 88% | $0.66 |
+
+- **Tiled** reads small text best. Use it for dense or large sheets, and when tag accuracy matters most.
+- **Single + review** costs about a third as much as tiled with the GPT models and traces
+  connections about as well. With Claude Opus it is more accurate than tiled. Claude Sonnet ends its
+  review early, so with Sonnet use tiled.
+- **Single** is the cheapest and fastest. It is weaker on connections, and some models (GPT-6.1
+  Terra) miss many items in one call. Use it for quick previews, or with GPT-6 Astra or Claude Opus.
+
+The single modes see the sheet at 2,576 px on the long edge, so on dense or poorly scanned sheets
+expect them to lose more accuracy than on the benchmark. Try a few of your own sheets in each
+mode before you change the default.
+
 ### Choosing a model
 
-On the 10-sheet benchmark in the [README](../README.md#accuracy-and-model-choice), every allowed model
-except Opus reached 99% label accuracy. The choice is mostly about connection tracing and cost:
+In tiled mode on the 10-sheet benchmark in the [README](../README.md#accuracy-and-model-choice),
+every allowed model except Opus reached 99% label accuracy. The choice is mostly about connection tracing and cost:
 
 - **GPT-6.1 Sol** (default): good tracing (89% connection F1) at $1.24 a sheet.
 - **GPT-6.1 Terra**: the cheapest ($0.55 a sheet) and the fastest, with slightly weaker tracing
@@ -141,6 +175,7 @@ Pass overrides under `config` when you start an execution:
   "key": "drawings/area-7.pdf",
   "config": {
     "modelId": "global.anthropic.claude-opus-5-5",
+    "detect": "single",
     "review": { "maxViews": 80 },
     "dashedAsPiping": true,
     "pdf": { "dpi": 400 }

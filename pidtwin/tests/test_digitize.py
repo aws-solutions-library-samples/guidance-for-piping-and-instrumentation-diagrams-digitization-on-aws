@@ -71,6 +71,43 @@ class Resume(unittest.TestCase):
             self.assertEqual(len(out["runs"]), 1)
             self.assertIsNotNone(sink.load_json("trace.json"))
 
+    def test_resume_ignores_trace_saved_by_the_other_mode(self):
+        sheet = Image.new("L", (1000, 1000), 255)
+        with tempfile.TemporaryDirectory() as d:
+            sink = LocalSink(f"{d}/s.")
+            sink.save("trace.json", {"items": ITEMS, "traced": TRACED, "usage": USAGE, "seconds": 5})  # tiled
+            reply = json.dumps({**TRACED, "items": ITEMS})
+            with mock.patch.object(pipeline, "call", return_value=(reply, USAGE, 2.0)) as call:
+                out, _, _ = pipeline.run_pipeline("m", "s.png", sheet, sink, review=False, resume=True,
+                                                  detect_mode="single")
+            self.assertEqual(call.call_count, 1)
+            self.assertEqual(out["_pipeline"]["detect"], "single")
+            self.assertEqual(sink.load_json("trace.json")["detect"], "single")
+
+
+class Single(unittest.TestCase):
+    def test_one_call_gives_items_runs_and_connections(self):
+        sheet = Image.new("L", (3000, 2000), 255)
+        dup = {"id": "HV-1", "category": "valve", "type": "gate valve", "tag": "HV-1", "bbox": [600, 490, 620, 510]}
+        bad = {"id": "X9", "category": "valve", "bbox": [5, 5, 5, 5]}
+        reply = "```json\n" + json.dumps({**TRACED, "items": ITEMS + [dup, bad]}) + "\n```"
+        with tempfile.TemporaryDirectory() as d:
+            sink = LocalSink(f"{d}/s.")
+            with mock.patch.object(pipeline, "call", return_value=(reply, USAGE, 2.0)) as call:
+                out, usage, _ = pipeline.run_pipeline("m", "s.png", sheet, sink, review=False, detect_mode="single")
+            self.assertEqual(call.call_count, 1)
+            self.assertEqual(max(call.call_args.args[1][0].size), pipeline.TILE)  # whole sheet, fitted
+            self.assertEqual(usage, USAGE)
+            self.assertEqual([v["id"] for v in out["valves"]], ["HV-1", "HV-1#2"])  # empty box dropped
+            self.assertEqual([(c["from"], c["to"]) for c in out["connections"]], [("P-101", "HV-1"), ("HV-1", "OP1")])
+            self.assertEqual(out["_pipeline"]["detect"], "single")
+            self.assertIsNone(sink.load("detect.json"))
+            self.assertIsNotNone(sink.load("single.raw.txt"))
+
+    def test_unknown_mode_is_rejected(self):
+        with self.assertRaises(ValueError):
+            pipeline.run_pipeline("m", "s.png", Image.new("L", (10, 10)), LocalSink("/tmp/x."), detect_mode="fast")
+
 
 class Job(unittest.TestCase):
     def test_digitize_sheet_writes_every_artifact(self):

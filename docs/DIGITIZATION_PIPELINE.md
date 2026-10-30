@@ -6,6 +6,10 @@ single Amazon Bedrock `Converse` calls with a fixed prompt. Review is a
 [Strands](https://strandsagents.com/) agent that decides for itself which tools to call. All three
 stages use the same model ID.
 
+This describes the default `tiled` mode. With `"detect": "single"`, steps 1–4 are replaced by one
+call on the whole sheet (see [Single mode](#single-mode)); the review is optional in both modes
+(`review.enabled`).
+
 The entry point is `digitize_sheet` in
 [`job.py`](../pidtwin/src/pidtwin/digitize/job.py). It calls `run_pipeline` in
 [`pipeline.py`](../pidtwin/src/pidtwin/digitize/pipeline.py).
@@ -184,17 +188,36 @@ validates it. It writes:
   (`R18`, for example). Look up that ID in `sheet.json` under `runs` to see the run's items, and
   under `connections[].run` to see the connections that came from it.
 
+## Single mode
+
+With `"detect": "single"`, `single()` sends the whole sheet, scaled to 2,576 px on the long edge
+(`TILE`), in one `converse` call with `SINGLE_PROMPT`. The prompt uses the same categories
+(`CATEGORY_DOC`) and run rules (`RUN_RULES`) as tiled mode and asks for items and runs together:
+
+```json
+{"drawing": {...}, "items": [{"id": "HV-12", "category": "valve", ...}], "runs": [...]}
+```
+
+The model gives each item its own ID. Items with a malformed box are dropped, and a repeated ID gets
+a `#2`, `#3`… suffix. There is no tiling, merging or separate trace call. The result is saved as
+`trace.json`, in the same shape as tiled mode, and from there steps 5–8 are the same: the draft is
+assembled, checked against the graph rules and, when review is on, handed to the review agent.
+
+Output: `single.raw.txt` (the model's raw reply) and `trace.json`
+
 ## Model calls per sheet
 
 | Stage | Calls |
 |---|---|
 | Detect | One per tile, sent in parallel; a typical 300-dpi sheet has a handful of tiles. Up to 3 attempts each if the reply has no valid JSON. |
 | Trace | One, with up to 3 attempts. |
+| Single call (single mode, replaces detect and trace) | One, with up to 3 attempts. |
 | Review | One per agent turn, until the agent calls `finish`. The view budget limits how many crops it can request. |
 
 ## Resuming a failed sheet
 
 When `resume` is on (the default in `digitize_sheet`), stages whose output file is already in the
-sink are not run again. If `trace.json` exists, both detect and trace are skipped. If only
+sink are not run again. If `trace.json` exists and was written in the same `detect` mode, both
+detect and trace (or the single call) are skipped. If only
 `detect.json` exists, only detect is skipped. Review always runs again. This lets a retried sheet
 continue from where it stopped instead of paying for the earlier stages a second time.

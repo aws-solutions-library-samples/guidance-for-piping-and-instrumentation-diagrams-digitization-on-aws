@@ -44,7 +44,8 @@ a plant graph through off-page connectors and shared equipment tags.
 This replaces version 1 of this Guidance, which combined three separate components: a trained
 symbol detector on a SageMaker endpoint, Bedrock Data Automation for OCR, and OpenCV line
 detection. The new approach needs no training data and no always-on endpoint, and it is far more
-accurate (see [Compared with version 1](#compared-with-version-1)). You can still get the
+accurate (see [Compared with version 1](#compared-with-version-1)). For how it compares with
+sending a sheet to a model in a single prompt, see [Detection modes](#detection-modes). You can still get the
 v1 code and model from the [v1.0.0 release](https://github.com/aws-solutions-library-samples/guidance-for-piping-and-instrumentation-diagrams-digitization-on-aws/releases/tag/v1.0.0).
 
 ## Architecture
@@ -94,7 +95,7 @@ deployment or per run (see [Configuration](docs/CONFIGURATION.md)).
 The benchmark below covers 10 real-world sheets: `1`, `10`, `100`–`107` from the Digitize-PID dataset
 (S. Paliwal, A. Jain, M. Sharma, L. Vig, *Digitize-PID: Automatic Digitization of Piping and
 Instrumentation Diagrams*, PAKDD 2021, [arXiv:2109.03794](https://arxiv.org/abs/2109.03794)). Each
-model ran once per sheet with detect, trace and review. The sheets are not redistributed here; get
+model ran once per sheet in the default tiled mode (detect, trace and review). The sheets are not redistributed here; get
 them from the authors' release.
 
 | Model | Label accuracy (F1) | Valve tags P / R | Instruments P / R | Line numbers P / R | Connections P / R | Connections F1 | Cost per sheet | Time per sheet |
@@ -147,6 +148,51 @@ against the same keys:
   The conversion keeps only associated text that looks like a valve tag or a line number, which
   favours version 1.
 
+### Detection modes
+
+The pipeline has three modes, set per deployment or per run (see
+[Choosing a mode](docs/CONFIGURATION.md#choosing-a-mode)):
+
+- **Tiled** (default): tiled detect at full resolution, trace, then the review agent.
+- **Single + review**: one call on the whole sheet, scaled to 2,576 px on the long edge, then the
+  graph checks and the review agent.
+- **Single**: the one call only. This is close to sending the sheet to a model yourself: the
+  prompt uses the pipeline's symbol categories, line-tracing rules and JSON format, and the reply
+  is assembled into a graph the same way.
+
+All three modes were run on the same 10 sheets and scored the same way:
+
+| Model | Mode | Label accuracy (F1) | Valve tags P / R | Instruments P / R | Line numbers P / R | Connections P / R | Connections F1 | Cost per sheet | Time per sheet |
+|---|---|---|---|---|---|---|---|---|---|
+| GPT-6.1 Sol | tiled | **99%** | 99% / 99% | 97% / 96% | 99% / 99% | 90% / 88% | **89%** | $1.24 | 5.8 min |
+| GPT-6.1 Sol | single + review | 96% | 96% / 95% | 99% / 99% | 95% / 95% | 89% / 88% | **89%** | $0.42 | 6.3 min |
+| GPT-6.1 Sol | single | 93% | 92% / 91% | 99% / 98% | 90% / 91% | 85% / 81% | 83% | $0.12 | 2.7 min |
+| GPT-6.1 Terra | tiled | **99%** | 100% / 99% | 100% / 95% | 100% / 100% | 86% / 88% | **87%** | $0.55 | 3.0 min |
+| GPT-6.1 Terra | single + review | **99%** | 100% / 98% | 100% / 95% | 100% / 100% | 84% / 85% | 85% | $0.20 | 2.6 min |
+| GPT-6.1 Terra | single | 85% | 99% / 74% | 100% / 72% | 99% / 80% | 72% / 49% | 59% | $0.04 | 0.6 min |
+| GPT-6 Astra | tiled | **99%** | 100% / 99% | 99% / 93% | 100% / 100% | 93% / 89% | **91%** | $6.79 | 5.3 min |
+| GPT-6 Astra | single + review | 98% | 97% / 96% | 100% / 100% | 98% / 98% | 92% / 89% | **91%** | $2.53 | 5.2 min |
+| GPT-6 Astra | single | 95% | 95% / 94% | 99% / 99% | 92% / 92% | 90% / 87% | 88% | $0.66 | 2.2 min |
+| Claude Sonnet 5.5 | tiled | **99%** | 100% / 99% | 95% / 97% | 97% / 100% | 84% / 79% | **81%** | $1.39 | 5.2 min |
+| Claude Sonnet 5.5 | single + review | **99%** | 99% / 99% | 99% / 99% | 100% / 100% | 75% / 70% | 72% | $1.08 | 5.0 min |
+| Claude Sonnet 5.5 | single | **99%** | 99% / 99% | 99% / 99% | 100% / 100% | 74% / 62% | 68% | $0.31 | 3.2 min |
+| Claude Opus 5.5 | tiled | 96% | 100% / 98% | 85% / 86% | 100% / 100% | 88% / 85% | 87% | $3.31 | 5.4 min |
+| Claude Opus 5.5 | single + review | **98%** | 98% / 98% | 97% / 97% | 100% / 100% | 90% / 88% | **89%** | $3.45 | 6.1 min |
+| Claude Opus 5.5 | single | **99%** | 98% / 98% | 99% / 99% | 100% / 100% | 85% / 78% | 82% | $0.38 | 2.5 min |
+
+- **Tiled** gives the best labels with every GPT model, because small tags are read at full
+  resolution.
+- **Single + review** traces connections as well as tiled with GPT-6.1 Sol, GPT-6 Astra and Claude
+  Opus, at about a third of the cost with the GPT models. With Claude Opus it beats tiled, which
+  lowers Opus's instrument precision. Claude Sonnet ends its review after a few views, so it gains
+  little.
+- **Single** costs about a tenth of tiled. The Claude models already read 99% of the labels in one
+  call, but every model traces connections worse than in tiled mode, and GPT-6.1 Terra misses about
+  a quarter of the items.
+- These sheets are clean, synthetic drawings that stay readable when scaled down. Expect the single
+  modes to lose more on dense or poorly scanned sheets. Each mode ran once per sheet, so
+  differences of a few points are within run-to-run variation.
+
 ## Cost
 
 You are responsible for the cost of the AWS services used while running this Guidance. There is
@@ -169,8 +215,10 @@ Almost all of the cost per sheet is model tokens. The rest is small:
 For 100 dense sheets a month, that is about **$125 with GPT-6.1 Sol** or about **$55 with
 GPT-6.1 Terra**, plus the $60 fixed cost. If you deploy into an existing VPC that already has these
 endpoints, the fixed cost drops to about $2. Version 1 cost about $879 a month for its inference
-endpoint alone. Sparse sheets use fewer tiles and tokens. Turning off the review
-step (`review.enabled: false`) or lowering `review.maxViews` cuts tokens, at some loss of accuracy.
+endpoint alone. Sparse sheets use fewer tiles and tokens. The single detection modes cut
+the cost per sheet to about a third (`"detect": "single"`) or a tenth (`"detect": "single"` with
+`review.enabled: false`), at some loss of accuracy (see [Detection modes](#detection-modes)).
+Lowering `review.maxViews` also cuts tokens.
 
 Prices are US East (N. Virginia) on-demand list prices on 2026-10-08 and will change. See
 [Amazon Bedrock pricing](https://aws.amazon.com/bedrock/pricing/) and
