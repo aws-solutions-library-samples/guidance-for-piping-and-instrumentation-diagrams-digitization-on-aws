@@ -4,11 +4,11 @@ Each sheet goes through three model stages: **detect**, **trace** and an optiona
 between, plain Python code merges, numbers, checks and exports the results. Detect and trace are
 single Amazon Bedrock `Converse` calls with a fixed prompt. Review is a
 [Strands](https://strandsagents.com/) agent that decides for itself which tools to call. All three
-stages use the same model ID.
+stages use the same model ID, unless `review.modelId` names another model for the review.
 
-This describes the default `tiled` mode. With `"detect": "single"`, steps 1–4 are replaced by one
-call on the whole sheet (see [Single mode](#single-mode)); the review is optional in both modes
-(`review.enabled`).
+This describes `tiled` mode. The default is `"detect": "single"`, where steps 1–4 are replaced by
+one call on the whole sheet (see [Single mode](#single-mode)); the review is optional in both modes
+(`review.enabled`), and by default runs on a different model (`review.modelId`).
 
 The entry point is `digitize_sheet` in
 [`job.py`](../pidtwin/src/pidtwin/digitize/job.py). It calls `run_pipeline` in
@@ -133,7 +133,8 @@ to the review stage as hints. Info-level findings, such as the count of open lin
 ## 7. Review (Strands agent)
 
 When `review` is on, `review_with_agent` starts a Strands `Agent` on a `BedrockModel` with the same
-model ID. The first message holds the full sheet with the draft drawn on it, the item and run
+model ID, or with `review.modelId` when that is set. The review's token usage is kept separately
+(`_pipeline.review_usage`) so each model's tokens are priced at its own rates. The first message holds the full sheet with the draft drawn on it, the item and run
 inventories, and the graph-check hints. The system prompt tells the agent to:
 
 1. Sweep the sheet in about 6–12 overlapping windows with `view_region`, comparing the drawn

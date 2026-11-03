@@ -63,7 +63,7 @@ Output:
   "bucket": "<OutputBucketName>",
   "prefix": "<execution name>/",
   "source": { "bucket": "...", "key": "drawings/area-7.pdf", "versionId": "..." },
-  "config": { "modelId": "...", "detect": "tiled", "review": { "enabled": true, "maxViews": 40 },
+  "config": { "modelId": "...", "detect": "tiled", "review": { "enabled": true, "maxViews": 40, "modelId": null },
               "dashedAsPiping": false, "pdf": { "dpi": 300, "maxPages": 50 } },
   "pages": [ { "sheetId": "area-7.p1", "pageKey": "<execution name>/pages/area-7.p1.png",
                "outputPrefix": "<execution name>/sheets/area-7.p1/" } ]
@@ -85,7 +85,7 @@ and the config. It calls `InvokeAgentRuntime` with a session ID derived from
   "pageKey": "<execution name>/pages/area-7.p1.png",
   "outputPrefix": "<execution name>/sheets/area-7.p1/",
   "sheetId": "area-7.p1",
-  "config": { "modelId": "...", "detect": "tiled", "review": { "enabled": true, "maxViews": 40 },
+  "config": { "modelId": "...", "detect": "tiled", "review": { "enabled": true, "maxViews": 40, "modelId": null },
               "dashedAsPiping": false },
   "taskToken": "..."
 }
@@ -108,7 +108,8 @@ finishes, it calls `SendTaskSuccess` with the sheet summary:
   "usage": { "inputTokens": 10208, "outputTokens": 22226, "cacheWriteInputTokens": 336272, "cacheReadInputTokens": 410269 },
   "seconds": 350, "usd": 1.24, "model_id": "us.openai.gpt-6.1-sol",
   "review": { "views": 31, "added": 4, "updated": 9, "deleted": 1, "runs_added": 3, "runs_updated": 6,
-              "runs_deleted": 0, "finished": true, "summary": "..." }
+              "runs_deleted": 0, "finished": true, "summary": "..." },
+  "review_model_id": "us.openai.gpt-6.1-sol"
 }
 ```
 
@@ -138,7 +139,8 @@ Output: `{"status": "SUCCEEDED" | "PARTIAL" | "FAILED", "sheets": {"total", "suc
               "items": ["T-101", "HV-101", "F3", "OP1"], "path": [[x, y], ...] } ],
   "connections": [ { "from": "T-101", "to": "HV-101", "kind": "process", "run": "R1" } ],
   "_usage": { "inputTokens": 0, "outputTokens": 0, "seconds": 0, "usd": 0.0, "model_id": "..." },
-  "_pipeline": { "detect": "tiled", "tiles": 6, "raw_detections": 212, "items": 180, "runs": 64, "review": { } }
+  "_pipeline": { "detect": "tiled", "tiles": 6, "raw_detections": 212, "items": 180, "runs": 64, "review": { },
+                 "review_model_id": "...", "review_usage": { } }
 }
 ```
 

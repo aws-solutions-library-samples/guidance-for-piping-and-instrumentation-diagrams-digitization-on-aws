@@ -16,7 +16,8 @@ from PIL import Image
 LAMBDA = Path(__file__).resolve().parents[2] / "cdk" / "lambda"
 SHEET = json.loads((Path(__file__).parent / "data" / "synthetic.sonnet.digitized.json").read_text())
 ALLOWED = ["us.anthropic.claude-sonnet-5-5", "us.openai.gpt-6.1-sol"]
-DEFAULTS = {"modelId": ALLOWED[0], "detect": "tiled", "review": {"enabled": True, "maxViews": 40}, "dashedAsPiping": False,
+DEFAULTS = {"modelId": ALLOWED[0], "detect": "tiled", "review": {"enabled": True, "maxViews": 40, "modelId": None},
+            "dashedAsPiping": False,
             "pdf": {"dpi": 150, "maxPages": 5}}
 
 
@@ -71,7 +72,7 @@ class PrepareInput(unittest.TestCase):
         out = self.mod.lambda_handler({"bucket": "in", "key": "drawings/My+Sheet+1.png", "executionName": "ex1",
                                        "config": {"modelId": ALLOWED[1], "review": {"maxViews": 10}}}, None)
         self.assertEqual(out["config"]["modelId"], ALLOWED[1])
-        self.assertEqual(out["config"]["review"], {"enabled": True, "maxViews": 10})
+        self.assertEqual(out["config"]["review"], {"enabled": True, "maxViews": 10, "modelId": None})
         self.assertEqual(out["pages"], [{"sheetId": "My_Sheet_1", "pageKey": "ex1/pages/My_Sheet_1.png",
                                          "outputPrefix": "ex1/sheets/My_Sheet_1/"}])
         self.assertIn(("out", "ex1/pages/My_Sheet_1.png"), self.mod.s3.objects)
@@ -93,6 +94,7 @@ class PrepareInput(unittest.TestCase):
         bad = [({"key": "a.png", "config": {"modelId": "us.example.unlisted-model"}}, "not allowed"),
                ({"key": "a.png", "config": {"review": {"maxViews": 0}}}, "maxViews"),
                ({"key": "a.png", "config": {"detect": "fast"}}, "detect"),
+               ({"key": "a.png", "config": {"review": {"modelId": "us.example.unlisted-model"}}}, "review.modelId"),
                ({"key": "a.docx"}, "unsupported"),
                ({"key": "missing.png"}, "not found"),
                ({"key": "a.png", "bucket": "elsewhere"}, "input bucket"),

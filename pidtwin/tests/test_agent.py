@@ -16,13 +16,13 @@ from PIL import Image
 AGENT = Path(__file__).resolve().parents[2] / "cdk" / "agent" / "main.py"
 PAYLOAD = {"bucket": "out", "pageKey": "ex/pages/a.png", "outputPrefix": "ex/sheets/a/", "sheetId": "a",
            "config": {"modelId": "us.anthropic.claude-sonnet-5-5", "detect": "single",
-                      "review": {"enabled": False, "maxViews": 5}},
+                      "review": {"enabled": False, "maxViews": 5, "modelId": "us.openai.gpt-6.1-sol"}},
            "taskToken": "tok"}
 
 
 def load():
     env = {"AWS_DEFAULT_REGION": "us-east-1", "OUTPUT_BUCKET": "out", "HEARTBEAT_SECONDS": "3600",
-           "ALLOWED_MODEL_IDS": json.dumps(["us.anthropic.claude-sonnet-5-5"])}
+           "ALLOWED_MODEL_IDS": json.dumps(["us.anthropic.claude-sonnet-5-5", "us.openai.gpt-6.1-sol"])}
     with mock.patch.dict(os.environ, env):
         spec = importlib.util.spec_from_file_location("agent_main", AGENT)
         mod = importlib.util.module_from_spec(spec)
@@ -42,7 +42,8 @@ class Callbacks(unittest.TestCase):
             task = mod.app.add_async_task("t")
             mod._background(dict(PAYLOAD), task)
         kwargs = dz.call_args.kwargs
-        self.assertEqual((kwargs["review"], kwargs["max_views"], kwargs["detect"]), (False, 5, "single"))
+        self.assertEqual((kwargs["review"], kwargs["max_views"], kwargs["detect"], kwargs["review_model_id"]),
+                         (False, 5, "single", "us.openai.gpt-6.1-sol"))
         out = json.loads(mod.sfn.send_task_success.call_args.kwargs["output"])
         self.assertEqual((out["status"], out["outputPrefix"]), ("SUCCEEDED", "ex/sheets/a/"))
         mod.sfn.send_task_failure.assert_not_called()
@@ -56,7 +57,8 @@ class Callbacks(unittest.TestCase):
 
     def test_disallowed_model_and_foreign_bucket_fail(self):
         mod = load()
-        for change in ({"config": {"modelId": "us.example.unlisted-model"}}, {"bucket": "someone-elses"}):
+        bad_review = {"config": {**PAYLOAD["config"], "review": {"modelId": "us.example.unlisted-model"}}}
+        for change in ({"config": {"modelId": "us.example.unlisted-model"}}, bad_review, {"bucket": "someone-elses"}):
             mod.sfn.reset_mock()
             mod._background({**PAYLOAD, **change}, mod.app.add_async_task("t"))
             self.assertEqual(mod.sfn.send_task_failure.call_args.kwargs["error"], "ValueError")

@@ -16,11 +16,11 @@ There are two levels of settings:
            "subnetIds": [], "routeTableIds": [], "createVpcEndpoints": true },
   "endpoints": { "bedrockRuntime": true, "agentCore": true, "stepFunctions": true, "logs": true, "s3": true },
   "digitization": {
-    "modelId": "us.openai.gpt-6.1-sol",
+    "modelId": "global.anthropic.claude-opus-5-5",
     "allowedModelIds": ["us.openai.gpt-6.1-sol", "us.openai.gpt-6.1-terra", "us.openai.gpt-6-astra",
                         "us.anthropic.claude-sonnet-5-5", "global.anthropic.claude-opus-5-5"],
-    "detect": "tiled",
-    "review": { "enabled": true, "maxViews": 40 },
+    "detect": "single",
+    "review": { "enabled": true, "maxViews": 40, "modelId": "us.openai.gpt-6.1-sol" },
     "dashedAsPiping": false,
     "pdf": { "dpi": 300, "maxPages": 50 }
   },
@@ -38,11 +38,12 @@ These are the deployed defaults. Every key except `allowedModelIds` can be overr
 
 | Key | Default | Meaning |
 |---|---|---|
-| `modelId` | `us.openai.gpt-6.1-sol` | Bedrock model or inference profile used for all three steps. It must be in `allowedModelIds`. |
+| `modelId` | `global.anthropic.claude-opus-5-5` | Bedrock model or inference profile used for detection (and for the review, unless `review.modelId` is set). It must be in `allowedModelIds`. |
 | `allowedModelIds` | five models, see above | The models a run may ask for. The agent's IAM role can invoke only these, and PrepareInput and the agent both reject any other model. Changing the list needs a redeploy. |
-| `detect` | `tiled` | How symbols are found and lines traced. `tiled` reads the sheet in overlapping tiles at full resolution, then traces lines in a second call. `single` does both in one call on the whole sheet, scaled to 2,576 px on the long edge. See [Choosing a mode](#choosing-a-mode). |
+| `detect` | `single` | How symbols are found and lines traced. `tiled` reads the sheet in overlapping tiles at full resolution, then traces lines in a second call. `single` does both in one call on the whole sheet, scaled to 2,576 px on the long edge. See [Choosing a mode](#choosing-a-mode). |
 | `review.enabled` | `true` | Run the review agent after detect and trace. When it is off, the run is faster and cheaper but less accurate. |
 | `review.maxViews` | `40` | How many zoomed views the review agent may request (1–200). Dense or large sheets benefit from more. |
+| `review.modelId` | `us.openai.gpt-6.1-sol` | Run the review agent on another model. `null` uses `modelId`. It must be in `allowedModelIds`. Its tokens are priced at its own rates in the reported cost. See [Using a different review model](#using-a-different-review-model). |
 | `dashedAsPiping` | `false` | Treat every dashed line as piping, for drawing sets whose notes say dotted lines are alternate routes. Even when this is off, a dashed line that carries a line number, or that piping tees into, is treated as piping, and `issues.json` lists it. |
 | `pdf.dpi` | `300` | Resolution used to render PDF pages. Pages are capped at 20,000 px per side. |
 | `pdf.maxPages` | `50` | Reject PDFs with more pages than this. |
@@ -53,8 +54,8 @@ These are the deployed defaults. Every key except `allowedModelIds` can be overr
 
 | Mode | Settings | What runs |
 |---|---|---|
-| Tiled (default) | `"detect": "tiled"`, review on | Tiled detect, trace, review agent |
-| Single + review | `"detect": "single"`, review on | One call on the whole sheet, then the review agent |
+| Tiled | `"detect": "tiled"`, review on | Tiled detect, trace, review agent |
+| Single + review (default) | `"detect": "single"`, review on | One call on the whole sheet, then the review agent |
 | Single | `"detect": "single"`, review off | One call on the whole sheet |
 
 On the 10-sheet benchmark in the [README](../README.md#detection-modes), with the models that suit
@@ -62,7 +63,8 @@ each mode:
 
 | Mode and model | Label accuracy (F1) | Connections F1 | Cost per sheet |
 |---|---|---|---|
-| Tiled, GPT-6.1 Sol (default) | 99% | 89% | $1.24 |
+| Single + review, Claude Opus 5.5 with a GPT-6.1 Sol review (default) | 99% | 91% | $0.68 |
+| Tiled, GPT-6.1 Sol | 99% | 89% | $1.24 |
 | Single + review, GPT-6.1 Sol | 96% | 89% | $0.42 |
 | Single + review, GPT-6.1 Terra | 99% | 85% | $0.20 |
 | Single + review, Claude Opus 5.5 | 98% | 89% | $3.45 |
@@ -77,19 +79,37 @@ each mode:
 
 The single modes see the sheet at 2,576 px on the long edge, so on dense or poorly scanned sheets
 expect them to lose more accuracy than on the benchmark. Try a few of your own sheets in each
-mode before you change the default.
+mode before you settle on one.
+
+### Using a different review model
+
+`review.modelId` runs the review agent on another model than detection. On the 10-sheet
+benchmark ([README](../README.md#mixing-models)), GPT-6.1 Sol was the better reviewer for every
+draft, and costs about $0.30 a sheet against $2–3 for a Claude Opus review. The best combination
+measured so far is single-mode detection on Claude Opus with a GPT-6.1 Sol review:
+
+```json
+{ "modelId": "global.anthropic.claude-opus-5-5", "detect": "single",
+  "review": { "modelId": "us.openai.gpt-6.1-sol" } }
+```
+
+This is the default. It reached 99% label accuracy and 90–91% connection F1 in two runs, for about
+$0.70 a sheet; tiled mode with GPT-6.1 Sol for both steps reaches 99% and 89% for $1.24. Set
+`review.modelId` to `null` to review with the detection model. The review model must be in
+`allowedModelIds`.
 
 ### Choosing a model
 
 In tiled mode on the 10-sheet benchmark in the [README](../README.md#accuracy-and-model-choice),
 every allowed model except Opus reached 99% label accuracy. The choice is mostly about connection tracing and cost:
 
-- **GPT-6.1 Sol** (default): good tracing (89% connection F1) at $1.24 a sheet.
+- **GPT-6.1 Sol**: good tracing (89% connection F1) at $1.24 a sheet.
 - **GPT-6.1 Terra**: the cheapest ($0.55 a sheet) and the fastest, with slightly weaker tracing
   (87%).
 - **GPT-6 Astra**: the best tracing (91%), at about $6.80 a sheet.
 - **Claude Sonnet 5.5**: weaker tracing (81%) at a price similar to Sol.
-- **Claude Opus 5.5**: weaker on instrument tags (85% precision) and $3.31 a sheet.
+- **Claude Opus 5.5**: weaker on instrument tags in tiled mode (85% precision) and $3.31 a sheet.
+  In single mode it reads labels very well, which is why the default uses it for detection.
 
 To use a model that is not in the list, add its inference profile ID to `allowedModelIds`, add its
 token prices to `PRICES` in `pidtwin/src/pidtwin/digitize/pipeline.py` (otherwise its cost is

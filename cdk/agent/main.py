@@ -7,7 +7,8 @@ SendTaskSuccess / SendTaskFailure when done.
 
 Payload:
   {"bucket": "...", "pageKey": "<exec>/pages/x.png", "outputPrefix": "<exec>/sheets/x/",
-   "sheetId": "x", "config": {"modelId": ..., "detect": "tiled", "review": {"enabled": true, "maxViews": 40},
+   "sheetId": "x", "config": {"modelId": ..., "detect": "tiled",
+                               "review": {"enabled": true, "maxViews": 40, "modelId": null},
    "dashedAsPiping": false}, "taskToken": "..."}
 Without taskToken the sheet is digitized synchronously and the summary returned (local testing only:
 a long synchronous call blocks the ping endpoint).
@@ -41,8 +42,10 @@ OUTPUT_BUCKET = os.environ.get("OUTPUT_BUCKET")
 def digitize(payload):
     cfg = payload["config"]
     model_id = cfg["modelId"]
-    if ALLOWED_MODEL_IDS and model_id not in ALLOWED_MODEL_IDS:
-        raise ValueError(f"model {model_id} is not in the allowed list {sorted(ALLOWED_MODEL_IDS)}")
+    review = cfg.get("review") or {}
+    for m in (model_id, review.get("modelId")):
+        if m and ALLOWED_MODEL_IDS and m not in ALLOWED_MODEL_IDS:
+            raise ValueError(f"model {m} is not in the allowed list {sorted(ALLOWED_MODEL_IDS)}")
     bucket = payload["bucket"]
     if OUTPUT_BUCKET and bucket != OUTPUT_BUCKET:
         raise ValueError(f"bucket {bucket} is not the pipeline's output bucket")
@@ -50,11 +53,11 @@ def digitize(payload):
     sheet = Image.open(io.BytesIO(body))
     sheet.load()
     log.info("sheet %s: %sx%s px, model %s", payload["sheetId"], *sheet.size, model_id)
-    review = cfg.get("review") or {}
     result = digitize_sheet(sheet, S3Sink(bucket, payload["outputPrefix"], s3), model_id, payload["sheetId"],
                             image_ref=f"s3://{bucket}/{payload['pageKey']}",
                             review=review.get("enabled", True), max_views=review.get("maxViews"),
-                            dashed_as_piping=cfg.get("dashedAsPiping", False), detect=cfg.get("detect", "tiled"))
+                            dashed_as_piping=cfg.get("dashedAsPiping", False), detect=cfg.get("detect", "tiled"),
+                            review_model_id=review.get("modelId"))
     return {**result, "status": "SUCCEEDED", "outputPrefix": payload["outputPrefix"]}
 
 
