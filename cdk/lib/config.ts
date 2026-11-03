@@ -8,7 +8,8 @@ export interface DigitizationConfig {
   allowedModelIds: string[];
   /** "tiled": tiled detect then trace; "single": one call on the whole sheet. */
   detect: 'tiled' | 'single';
-  review: { enabled: boolean; maxViews: number };
+  /** modelId: run the review on another allowed model; null = same as modelId. */
+  review: { enabled: boolean; maxViews: number; modelId: string | null };
   dashedAsPiping: boolean;
   pdf: { dpi: number; maxPages: number };
 }
@@ -55,6 +56,9 @@ export function loadConfig(): StackConfig {
   const d = cfg.digitization;
   if (!d.allowedModelIds.includes(d.modelId)) {
     throw new Error(`digitization.modelId ${d.modelId} must be one of digitization.allowedModelIds`);
+  }
+  if (d.review.modelId != null && !d.allowedModelIds.includes(d.review.modelId)) {
+    throw new Error(`digitization.review.modelId ${d.review.modelId} must be null or one of digitization.allowedModelIds`);
   }
   if (cfg.orchestration.sheetTimeoutMinutes < 5 || cfg.orchestration.sheetTimeoutMinutes > 465) {
     throw new Error('orchestration.sheetTimeoutMinutes must be between 5 and 465 (AgentCore sessions last at most 8 hours)');

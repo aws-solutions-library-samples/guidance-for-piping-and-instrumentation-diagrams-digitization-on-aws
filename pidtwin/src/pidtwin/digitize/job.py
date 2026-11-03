@@ -14,18 +14,18 @@ from ..graph.build import build_graph
 from ..graph.dexpi import to_proteus
 from ..graph.dot import to_dot
 from ..graph.validate import summary, validate
-from .pipeline import cost, draw_state, fit, run_pipeline
+from .pipeline import draw_state, fit, run_pipeline, sheet_cost
 
 OVERLAY_SIDE = 4096  # long edge of overlay.png
 
 
 def digitize_sheet(sheet, sink, model_id, sheet_id, image_ref=None, review=True, max_views=None,
-                   dashed_as_piping=False, resume=True, detect="tiled"):
+                   dashed_as_piping=False, resume=True, detect="tiled", review_model_id=None):
     """sheet: PIL image. Returns a small summary (counts, issues, usage, cost) for the orchestrator."""
     out, usage, secs = run_pipeline(model_id, image_ref or sheet_id, sheet, sink, review=review,
                                     max_views=max_views, dashed_as_piping=dashed_as_piping, resume=resume,
-                                    detect_mode=detect)
-    usd = cost(model_id, usage)
+                                    detect_mode=detect, review_model_id=review_model_id)
+    usd = sheet_cost(model_id, usage, out.get("_pipeline") or {})
     out["_usage"] = {**usage, "seconds": round(secs), "usd": usd, "model_id": model_id}
     sink.save("sheet.json", out)
 
@@ -45,4 +45,5 @@ def digitize_sheet(sheet, sink, model_id, sheet_id, image_ref=None, review=True,
     return {"sheet_id": sheet_id, "drawing": out.get("drawing") or {}, "counts": counts,
             "graph": {"nodes": len(g.nodes), "edges": len(g.edges)}, "issues": summary(issues),
             "usage": usage, "seconds": round(secs), "usd": usd, "model_id": model_id,
-            "review": (out.get("_pipeline") or {}).get("review")}
+            "review": (out.get("_pipeline") or {}).get("review"),
+            "review_model_id": (out.get("_pipeline") or {}).get("review_model_id")}

@@ -15,7 +15,7 @@
     "s3": true
   },
   "digitization": {
-    "modelId": "us.openai.gpt-6.1-sol",
+    "modelId": "global.anthropic.claude-opus-5-5",
     "allowedModelIds": [
       "us.openai.gpt-6.1-sol",
       "us.openai.gpt-6.1-terra",
@@ -23,10 +23,11 @@
       "us.anthropic.claude-sonnet-5-5",
       "global.anthropic.claude-opus-5-5"
     ],
-    "detect": "tiled",
+    "detect": "single",
     "review": {
       "enabled": true,
-      "maxViews": 40
+      "maxViews": 40,
+      "modelId": "us.openai.gpt-6.1-sol"
     },
     "dashedAsPiping": false,
     "pdf": {

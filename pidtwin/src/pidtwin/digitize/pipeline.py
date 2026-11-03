@@ -14,8 +14,9 @@ either way. Connections are derived from the runs. The pre-review result is kept
 violations found in the draft (pidtwin.graph.validate) are handed to the review agent as hints.
 Artifacts go to a sink (artifacts.py): local files here, S3 when running in AgentCore Runtime.
 
-Usage: python -m pidtwin.digitize.pipeline [--detect tiled|single] [--no-review] [--resume] [--models sonnet,opus|all] [image|pdf ...]
-       (default: GPT-6.1 Sol on every image in samples/; results in results/)
+Usage: python -m pidtwin.digitize.pipeline [--detect single|tiled] [--no-review] [--review-model sol|same]
+           [--resume] [--models opus,sol|all] [image|pdf ...]
+       (default: Claude Opus 5.5 single call + GPT-6.1 Sol review on every image in samples/; results in results/)
 Ground truth: samples/<name>.truth.json alongside the image (optional).
 """
 import argparse
@@ -55,13 +56,22 @@ PRICES = {
     "global.anthropic.claude-opus-5-5": (4.00, 20.00, 5.00, 0.20),
     "us.anthropic.claude-sonnet-5-5": (2.20, 11.00, 2.75, 0.11),
 }
-DEFAULT_MODEL = "sol"  # best value on the 10-sheet benchmark (README)
+DEFAULT_MODEL = "opus"  # with --detect single and --review-model sol: the deployed default (README)
 USAGE_KEYS = ("inputTokens", "outputTokens", "cacheWriteInputTokens", "cacheReadInputTokens")
 
 
 def cost(model_id, usage):
     p = PRICES.get(model_id)
     return None if not p else sum(usage.get(k, 0) * rate for k, rate in zip(USAGE_KEYS, p)) / 1e6
+
+
+def sheet_cost(model_id, usage, meta):
+    """Cost of one sheet; when review ran on another model, its tokens are priced at that model's rates."""
+    rm, ru = meta.get("review_model_id"), meta.get("review_usage")
+    if not ru or rm in (None, model_id):
+        return cost(model_id, usage)
+    a, b = cost(model_id, {k: usage.get(k, 0) - ru.get(k, 0) for k in USAGE_KEYS}), cost(rm, ru)
+    return None if a is None or b is None else a + b
 TILE = 2576       # Claude 5.x long-edge limit; anything larger is downscaled by the model
 OVERLAP = 0.12    # fraction of a tile step shared with each neighbour
 MAX_BYTES = 3_500_000  # stay under Bedrock's per-image size limit
@@ -413,11 +423,11 @@ def add_usage(a, b):
 
 
 def run_pipeline(model_id, image, sheet, sink, review=True, max_views=None, dashed_as_piping=False, resume=False,
-                 detect_mode="tiled"):
+                 detect_mode="tiled", review_model_id=None):
     """Detect, trace and (optionally) review one sheet. detect_mode "tiled" runs tiled detect then
     trace; "single" does both in one call on the whole sheet. With resume, stages whose artifact is
     already in the sink (detect.json, trace.json) are loaded instead of re-run, so a retried sheet
-    picks up where it stopped."""
+    picks up where it stopped. review_model_id runs the review on another model (default: model_id)."""
     if detect_mode not in ("tiled", "single"):
         raise ValueError(f"detect_mode must be 'tiled' or 'single', not {detect_mode!r}")
     done = sink.load_json("trace.json") if resume else None
@@ -446,11 +456,12 @@ def run_pipeline(model_id, image, sheet, sink, review=True, max_views=None, dash
         from .review import MAX_VIEWS, review_with_agent  # strands import is slow; only load when used
         sink.save("draft.json", out)
         issues = graph_issues(out, dashed_as_piping)
-        items, runs, log, u3, s3 = review_with_agent(model_id, sheet, items, runs, sink, issues,
-                                                     max_views or MAX_VIEWS)
+        rm = review_model_id or model_id
+        items, runs, log, u3, s3 = review_with_agent(rm, sheet, items, runs, sink, issues, max_views or MAX_VIEWS)
         usage, secs = add_usage(usage, u3), secs + s3
         out = assemble(items, runs, drawing, image, sheet.size)
-        out["_pipeline"] = {**meta, "review": log, "graph_issues_before_review": len(issues)}
+        out["_pipeline"] = {**meta, "review": log, "graph_issues_before_review": len(issues),
+                            "review_model_id": rm, "review_usage": u3}
     return out, usage, secs
 
 
@@ -549,27 +560,31 @@ def report(name, out, usage, secs, truth, usd=None):
     return sc
 
 
-def run(image: Path, models, review, resume=False, detect_mode="tiled"):
+def run(image: Path, models, review, resume=False, detect_mode="tiled", review_model=None):
     sheet = Image.open(image)
     sheet.load()
     truth_path = image.with_name(image.stem + ".truth.json")
     truth = json.loads(truth_path.read_text()) if truth_path.exists() else None
     print(f"\n### {image.name}  {sheet.size[0]}x{sheet.size[1]}  detect={detect_mode}  review={review}  "
-          f"tiles={len(tile_boxes(*sheet.size))}  ({'with' if truth else 'no'} ground truth)", flush=True)
-    slug = lambda name: name.replace(" ", "_").replace(".", "") + (".single" if detect_mode == "single" else "")
+          f"tiles={len(tile_boxes(*sheet.size))}  ({'with' if truth else 'no'} ground truth)"
+          + (f"  review model={review_model}" if review_model else ""), flush=True)
+    short = lambda name: name.replace(" ", "_").replace(".", "")
+    rm_slug = next((short(n) for n, m in MODELS.items() if m == review_model), None)
+    slug = lambda name: (short(name) + (".single" if detect_mode == "single" else "")
+                         + (f".review-{rm_slug}" if review_model and review_model != models[name] else ""))
 
     summary = []
     with cf.ThreadPoolExecutor(len(models)) as ex:
         sinks = {name: LocalSink(f"results/{image.stem}.{slug(name)}.") for name in models}
         futs = {name: ex.submit(run_pipeline, mid, image, sheet, sinks[name], review, resume=resume,
-                              detect_mode=detect_mode) for name, mid in models.items()}
+                              detect_mode=detect_mode, review_model_id=review_model) for name, mid in models.items()}
         for name, fut in futs.items():
             try:
                 out, usage, secs = fut.result()
             except Exception as e:
                 print(f"  {name}: ERROR {type(e).__name__}: {e}")
                 continue
-            usd = cost(models[name], usage)
+            usd = sheet_cost(models[name], usage, out["_pipeline"])
             out["_usage"] = {**usage, "seconds": round(secs), "usd": usd}
             summary.append((name, usage, secs, usd))
             Path(f"results/{image.stem}.{slug(name)}.json").write_text(json.dumps(out, indent=2))
@@ -586,9 +601,12 @@ def run(image: Path, models, review, resume=False, detect_mode="tiled"):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("images", nargs="*")
-    ap.add_argument("--detect", choices=("tiled", "single"), default="tiled",
-                    help="tiled detect + trace (default), or one call on the whole sheet")
+    ap.add_argument("--detect", choices=("tiled", "single"), default="single",
+                    help="one call on the whole sheet (default), or tiled detect + trace")
     ap.add_argument("--no-review", action="store_true", help="skip the Strands review agent")
+    ap.add_argument("--review-model", default="sol",
+                    help="run the review on this model (a substring of a model name; default: sol), "
+                         "or 'same' to review with the detect model")
     ap.add_argument("--models", default=DEFAULT_MODEL,
                     help=f"comma-separated substrings of model names, e.g. sonnet,opus, or all (default: {DEFAULT_MODEL})")
     ap.add_argument("--resume", action="store_true", help="reuse detect/trace results already in results/")
@@ -607,5 +625,11 @@ if __name__ == "__main__":
             pages += render(im, "results/pages")
         else:
             pages.append(im)
+    review_model = None
+    if a.review_model and a.review_model != "same":
+        matches = [m for n, m in MODELS.items() if a.review_model.lower() in n.lower()]
+        if len(matches) != 1:
+            ap.error(f"--review-model {a.review_model!r} must match exactly one of {list(MODELS)}")
+        review_model = matches[0]
     for im in pages:
-        run(im, models, not a.no_review, a.resume, a.detect)
+        run(im, models, not a.no_review, a.resume, a.detect, review_model)

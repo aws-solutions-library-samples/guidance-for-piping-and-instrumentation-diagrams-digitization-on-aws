@@ -104,9 +104,41 @@ class Single(unittest.TestCase):
             self.assertIsNone(sink.load("detect.json"))
             self.assertIsNotNone(sink.load("single.raw.txt"))
 
-    def test_unknown_mode_is_rejected(self):
+    def test_unknown_mode_is_rejected_first(self):
         with self.assertRaises(ValueError):
             pipeline.run_pipeline("m", "s.png", Image.new("L", (10, 10)), LocalSink("/tmp/x."), detect_mode="fast")
+
+
+class ReviewModel(unittest.TestCase):
+    SOL, OPUS = "us.openai.gpt-6.1-sol", "global.anthropic.claude-opus-5-5"
+
+    def test_cost_prices_each_model_at_its_own_rates(self):
+        review_usage = dict.fromkeys(pipeline.USAGE_KEYS, 400)
+        meta = {"review_model_id": self.SOL, "review_usage": review_usage}
+        draft = {k: 1000 - 400 for k in pipeline.USAGE_KEYS}
+        self.assertAlmostEqual(pipeline.sheet_cost(self.OPUS, USAGE, meta),
+                               pipeline.cost(self.OPUS, draft) + pipeline.cost(self.SOL, review_usage))
+        same = {"review_model_id": self.OPUS, "review_usage": review_usage}
+        self.assertAlmostEqual(pipeline.sheet_cost(self.OPUS, USAGE, same), pipeline.cost(self.OPUS, USAGE))
+        self.assertIsNone(pipeline.sheet_cost(self.OPUS, USAGE, {"review_model_id": "us.example.unpriced",
+                                                                 "review_usage": review_usage}))
+
+    def test_review_runs_on_the_review_model(self):
+        from pidtwin.digitize import review
+        sheet = Image.new("L", (1000, 1000), 255)
+        review_usage = dict.fromkeys(pipeline.USAGE_KEYS, 10)
+        with tempfile.TemporaryDirectory() as d:
+            sink = LocalSink(f"{d}/s.")
+            sink.save("trace.json", {"items": ITEMS, "traced": TRACED, "usage": USAGE, "seconds": 5})
+            with mock.patch.object(review, "review_with_agent",
+                                   return_value=(ITEMS, TRACED["runs"], {"views": 1}, review_usage, 1.0)) as rv:
+                result = job.digitize_sheet(sheet, sink, self.OPUS, "s1", review=True, review_model_id=self.SOL)
+            self.assertEqual(rv.call_args.args[0], self.SOL)
+            out = sink.load_json("sheet.json")
+            self.assertEqual(out["_pipeline"]["review_model_id"], self.SOL)
+            self.assertEqual(out["_pipeline"]["review_usage"], review_usage)
+            self.assertAlmostEqual(result["usd"], pipeline.cost(self.OPUS, USAGE) + pipeline.cost(self.SOL, review_usage))
+            self.assertEqual(result["review_model_id"], self.SOL)
 
 
 class Job(unittest.TestCase):

@@ -89,18 +89,21 @@ complete.
 
 The digitizer runs on any vision model on Amazon Bedrock that supports the Converse API. The
 deployment allows OpenAI GPT on Bedrock (GPT-6.1 Sol, GPT-6.1 Terra, GPT-6 Astra) and Anthropic
-Claude (Sonnet 5.5, Opus 5.5). The default is **GPT-6.1 Sol**. You can change the model per
-deployment or per run (see [Configuration](docs/CONFIGURATION.md)).
+Claude (Sonnet 5.5, Opus 5.5). The default reads the sheet with **Claude Opus 5.5** in one call
+(`"detect": "single"`) and reviews the result with **GPT-6.1 Sol**: 99% label accuracy and 91%
+connection F1 for about $0.68 a sheet on the benchmark below (see [Mixing models](#mixing-models)).
+You can change the models and the mode per deployment or per run (see
+[Configuration](docs/CONFIGURATION.md)).
 
 The benchmark below covers 10 real-world sheets: `1`, `10`, `100`–`107` from the Digitize-PID dataset
 (S. Paliwal, A. Jain, M. Sharma, L. Vig, *Digitize-PID: Automatic Digitization of Piping and
 Instrumentation Diagrams*, PAKDD 2021, [arXiv:2109.03794](https://arxiv.org/abs/2109.03794)). Each
-model ran once per sheet in the default tiled mode (detect, trace and review). The sheets are not redistributed here; get
+model ran once per sheet in tiled mode (detect, trace and review) with the same model for every step. The sheets are not redistributed here; get
 them from the authors' release.
 
 | Model | Label accuracy (F1) | Valve tags P / R | Instruments P / R | Line numbers P / R | Connections P / R | Connections F1 | Cost per sheet | Time per sheet |
 |---|---|---|---|---|---|---|---|---|
-| GPT-6.1 Sol (default) | **99%** | 99% / 99% | 97% / 96% | 99% / 99% | 90% / 88% | **89%** | $1.24 | 5.8 min |
+| GPT-6.1 Sol | **99%** | 99% / 99% | 97% / 96% | 99% / 99% | 90% / 88% | **89%** | $1.24 | 5.8 min |
 | GPT-6.1 Terra | **99%** | 100% / 99% | 100% / 95% | 100% / 100% | 86% / 88% | 87% | **$0.55** | **3.0 min** |
 | GPT-6 Astra | **99%** | 100% / 99% | 99% / 93% | 100% / 100% | 93% / 89% | **91%** | $6.79 | 5.3 min |
 | Claude Sonnet 5.5 | **99%** | 100% / 99% | 95% / 97% | 97% / 100% | 84% / 79% | 81% | $1.39 | 5.3 min |
@@ -131,7 +134,8 @@ against the same keys:
 
 | Pipeline | Label accuracy (F1) | Valve tags P / R | Instruments P / R | Line numbers P / R | Connections P / R | Connections F1 |
 |---|---|---|---|---|---|---|
-| Version 2, GPT-6.1 Sol (default) | **99%** | 99% / 99% | 97% / 96% | 99% / 99% | 90% / 88% | **89%** |
+| Version 2, default (Claude Opus single call, GPT-6.1 Sol review) | **99%** | 99% / 98% | 99% / 99% | 100% / 100% | 92% / 90% | **91%** |
+| Version 2, GPT-6.1 Sol tiled | **99%** | 99% / 99% | 97% / 96% | 99% / 99% | 90% / 88% | 89% |
 | Version 1 | 74% | 98% / 72% | 0% / 0% | 100% / 92% | 11% / 35% | 17% |
 
 - Version 1 ran with its default settings, except that the notes boundary was given as
@@ -153,9 +157,9 @@ against the same keys:
 The pipeline has three modes, set per deployment or per run (see
 [Choosing a mode](docs/CONFIGURATION.md#choosing-a-mode)):
 
-- **Tiled** (default): tiled detect at full resolution, trace, then the review agent.
-- **Single + review**: one call on the whole sheet, scaled to 2,576 px on the long edge, then the
-  graph checks and the review agent.
+- **Tiled**: tiled detect at full resolution, trace, then the review agent.
+- **Single + review** (the default mode): one call on the whole sheet, scaled to 2,576 px on the
+  long edge, then the graph checks and the review agent.
 - **Single**: the one call only. This is close to sending the sheet to a model yourself: the
   prompt uses the pipeline's symbol categories, line-tracing rules and JSON format, and the reply
   is assembled into a graph the same way.
@@ -193,6 +197,32 @@ All three modes were run on the same 10 sheets and scored the same way:
   modes to lose more on dense or poorly scanned sheets. Each mode ran once per sheet, so
   differences of a few points are within run-to-run variation.
 
+### Mixing models
+
+The review can run on another model than detection (`review.modelId`). With the same drafts, a
+Claude Opus 5.5 draft reviewed by GPT-6.1 Sol was compared with a GPT-6.1 Sol draft reviewed by Claude
+Opus 5.5:
+
+| Mode | Draft | Review | Label accuracy (F1) | Valve tags P / R | Instruments P / R | Line numbers P / R | Connections P / R | Connections F1 | Review cost per sheet |
+|---|---|---|---|---|---|---|---|---|---|
+| tiled | Claude Opus | Claude Opus | 96% | 100% / 98% | 85% / 86% | 100% / 100% | 88% / 85% | 87% | — |
+| tiled | Claude Opus | GPT-6.1 Sol | 98% | 100% / 98% | 93% / 90% | 100% / 100% | 90% / 87% | 88% | $0.30 |
+| tiled | GPT-6.1 Sol | GPT-6.1 Sol | **99%** | 99% / 99% | 97% / 96% | 99% / 99% | 90% / 88% | 89% | — |
+| tiled | GPT-6.1 Sol | Claude Opus | **99%** | 99% / 99% | 97% / 95% | 99% / 99% | 88% / 87% | 88% | $2.15 |
+| single | Claude Opus | Claude Opus | 98% | 98% / 98% | 97% / 97% | 100% / 100% | 90% / 88% | 89% | $3.06 |
+| single | Claude Opus | GPT-6.1 Sol | **99%** | 99% / 99% | 98% / 98% | 100% / 100% | 91% / 89% | **90%** | $0.32 |
+| single | GPT-6.1 Sol | GPT-6.1 Sol | 96% | 96% / 95% | 99% / 99% | 95% / 95% | 89% / 88% | 89% | $0.31 |
+| single | GPT-6.1 Sol | Claude Opus | 96% | 96% / 95% | 99% / 98% | 96% / 96% | 87% / 85% | 86% | $3.08 |
+
+- GPT-6.1 Sol is the better reviewer for both drafts, at about a tenth of the cost of a Claude Opus
+  review. Reviewing with Claude Opus never improved on a GPT-6.1 Sol review.
+- Claude Opus drafting in single mode with a GPT-6.1 Sol review is the most accurate configuration
+  measured, for about $0.70 a sheet in total. A second run of it gave 99% label accuracy and 91%
+  connection F1 for $0.68 a sheet. Single sheets moved by up to 9 points between the two runs, so
+  read small differences in these tables with care.
+- The review cost is what the reviewer spent; the draft cost depends on the draft model and mode
+  (see [Detection modes](#detection-modes)).
+
 ## Cost
 
 You are responsible for the cost of the AWS services used while running this Guidance. There is
@@ -206,19 +236,20 @@ Almost all of the cost per sheet is model tokens. The rest is small:
 
 | Service | Usage per sheet | Cost per sheet (USD) |
 |---|---|---|
-| Amazon Bedrock (GPT-6.1 Sol) | about 760,000 input tokens (mostly cached images) and 22,000 output tokens per benchmark sheet | about $1.24 |
+| Amazon Bedrock, Claude Opus 5.5 single call | about 6,000 input and 16,000 output tokens per benchmark sheet | about $0.35 |
+| Amazon Bedrock, GPT-6.1 Sol review | about 1.1 million input tokens (almost all cached images) and 7,000 output tokens | about $0.33 |
 | Bedrock AgentCore Runtime | one session of a few minutes, billed for active CPU and memory | under $0.01 |
 | AWS Step Functions (Standard) | about 10 state transitions | under $0.001 |
 | AWS Lambda | three short invocations | under $0.001 |
 | Amazon S3 | about 20 objects, a few MB | under $0.001 |
 
-For 100 dense sheets a month, that is about **$125 with GPT-6.1 Sol** or about **$55 with
-GPT-6.1 Terra**, plus the $60 fixed cost. If you deploy into an existing VPC that already has these
+For 100 dense sheets a month, that is about **$70 with the default**, about **$125** in tiled mode
+with GPT-6.1 Sol, or about **$20** in single + review mode with GPT-6.1 Terra, plus the $60 fixed
+cost. If you deploy into an existing VPC that already has these
 endpoints, the fixed cost drops to about $2. Version 1 cost about $879 a month for its inference
-endpoint alone. Sparse sheets use fewer tiles and tokens. The single detection modes cut
-the cost per sheet to about a third (`"detect": "single"`) or a tenth (`"detect": "single"` with
-`review.enabled: false`), at some loss of accuracy (see [Detection modes](#detection-modes)).
-Lowering `review.maxViews` also cuts tokens.
+endpoint alone. Sparse sheets use fewer tokens. Turning the review off
+(`review.enabled: false`) or lowering `review.maxViews` cuts tokens, at some loss of accuracy (see
+[Detection modes](#detection-modes)).
 
 Prices are US East (N. Virginia) on-demand list prices on 2026-10-08 and will change. See
 [Amazon Bedrock pricing](https://aws.amazon.com/bedrock/pricing/) and
@@ -250,7 +281,8 @@ cdk deploy --all
 This deploys two stacks: `PNIDDigitization-Network` (VPC, subnets, endpoints) and `PNIDDigitization`
 (buckets, agent runtime, Lambdas, workflow). Set `CDK_STACK_NAME` to use another name prefix.
 
-The defaults work without a config file: GPT-6.1 Sol, review on, upload trigger on for the
+The defaults work without a config file: Claude Opus 5.5 in single mode with a GPT-6.1 Sol
+review, upload trigger on for the
 `drawings/` prefix, 4 sheets at a time, and a new isolated VPC. To change any of them, copy
 `config.json.template` to `config.json` and edit it. See [Configuration](docs/CONFIGURATION.md),
 which also covers deploying into an existing VPC.
@@ -319,9 +351,9 @@ credentials, and the workflow is not needed:
 ```bash
 cd pidtwin
 python -m venv .venv && .venv/bin/pip install -e '.[digitize,pdf]'
-.venv/bin/python -m pidtwin.digitize.pipeline ../samples/synthetic_pid_1001.png      # GPT-6.1 Sol
-.venv/bin/pidtwin build results/synthetic_pid_1001.GPT-61_Sol.json
-.venv/bin/pidtwin dexpi results/synthetic_pid_1001.GPT-61_Sol.graph.json
+.venv/bin/python -m pidtwin.digitize.pipeline ../samples/synthetic_pid_1001.png      # the default
+.venv/bin/pidtwin build results/synthetic_pid_1001.Claude_Opus_55.single.review-GPT-61_Sol.json
+.venv/bin/pidtwin dexpi results/synthetic_pid_1001.Claude_Opus_55.single.review-GPT-61_Sol.graph.json
 ```
 
 If a `<name>.truth.json` file sits next to the image, the pipeline scores the result against it.
