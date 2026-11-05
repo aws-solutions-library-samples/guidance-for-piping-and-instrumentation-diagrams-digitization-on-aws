@@ -31,6 +31,19 @@ export interface StackConfig {
     sheetTimeoutMinutes: number;
     uploadTrigger: { enabled: boolean; prefix: string };
   };
+  /** Connector for Spatial Data Management on AWS (docs/SDMA_CONNECTOR.md). */
+  sdma: {
+    enabled: boolean;
+    /** SDMA content bucket the workflow reads drawings from. */
+    contentBucketName: string;
+    /** KMS key of the content bucket, if it uses SSE-KMS; empty otherwise. */
+    contentBucketKmsKeyArn: string;
+    /**
+     * Execution roles of SDMA's ConnectorInvocationFunction, ConnectorInvocationAsyncFunction (they run the
+     * connector) and ResourceOperationFunction (it test-assumes the role when the connector is created).
+     */
+    trustedRoleArns: string[];
+  };
 }
 
 const DEFAULTS: StackConfig = JSON.parse(
@@ -62,6 +75,9 @@ export function loadConfig(): StackConfig {
   }
   if (cfg.orchestration.sheetTimeoutMinutes < 5 || cfg.orchestration.sheetTimeoutMinutes > 465) {
     throw new Error('orchestration.sheetTimeoutMinutes must be between 5 and 465 (AgentCore sessions last at most 8 hours)');
+  }
+  if (cfg.sdma.enabled && (!cfg.sdma.contentBucketName || !cfg.sdma.trustedRoleArns.length)) {
+    throw new Error('sdma.enabled needs sdma.contentBucketName and sdma.trustedRoleArns (see docs/SDMA_CONNECTOR.md)');
   }
   return cfg;
 }

@@ -23,8 +23,9 @@ Start the state machine with:
 
 | Field | Required | Meaning |
 |---|---|---|
-| `bucket` | yes | The stack's input bucket. Other buckets are rejected. |
+| `bucket` | yes | The stack's input bucket, or the SDMA content bucket when the [SDMA connector](SDMA_CONNECTOR.md) is deployed. Other buckets are rejected. |
 | `key` | yes | Object key of a `.pdf`, `.png`, `.jpg`/`.jpeg`, `.tif`/`.tiff` or `.webp` file. |
+| `fileName` | no | Name of the file, when the key has no extension (SDMA keys are content hashes). Sets the file type and the sheet ids. |
 | `config` | no | Per-run overrides of the `digitization` settings. See [Configuration](CONFIGURATION.md#per-run-settings). |
 
 The upload trigger starts runs with `{"bucket", "key", "trigger": "upload"}` and no `config`.
@@ -34,12 +35,13 @@ The upload trigger starts runs with `{"bucket", "key", "trigger": "upload"}` and
 | State | Type | Does |
 |---|---|---|
 | `SupportedFile?` | Choice | Uploads (`"trigger": "upload"`, set by the upload rule) whose key does not end in a supported extension go to `IgnoredUpload` and end. Manual starts always continue. |
-| `DefaultConfig`, `MergeInput` | Pass | Add `"config": {}` when the input has none. |
+| `DefaultConfig`, `MergeInput` | Pass | Add `"config": {}` and `"fileName": null` when the input has none. |
 | `PrepareInput` | Lambda | Validate the input and config, write `pages/` and `input.json`, return the page list. |
 | `Sheets` | Map | For each page, run `DigitizeSheet`, up to `maxConcurrentSheets` at a time. |
 | `DigitizeSheet` | Lambda, `.waitForTaskToken` | Start an AgentCore session, then wait for its callback (heartbeat 300 s, timeout `sheetTimeoutMinutes`). |
 | `SheetFailed` | Pass | Turn a failed sheet into `{"status": "FAILED", "sheetId", "error", "cause"}` so the other sheets continue. |
-| `MergeSheets` | Lambda | Write the plant graph and `summary.json`. |
+| `MergeSheets` | Lambda | Write the plant graph, `overlays/` and `summary.json`. |
+| `FailureMessage`, `RecordFailure` | Pass, S3 `PutObject` | If `PrepareInput` or `MergeSheets` fails, write the error to `_FAILED.json`, then fail the run with that error. |
 | `AllSheetsDone?` | Choice | Succeed if every sheet succeeded. Otherwise fail with `SheetsFailed`; the outputs of the good sheets are still written. |
 
 `DigitizeSheet` is retried on a new session twice, starting after 1 minute and backing off ×2,
@@ -53,7 +55,7 @@ the sheet.
 Input, as built by the state machine:
 
 ```json
-{ "bucket": "...", "key": "...", "config": { }, "executionName": "<execution name>" }
+{ "bucket": "...", "key": "...", "fileName": null, "config": { }, "executionName": "<execution name>" }
 ```
 
 Output:
@@ -249,6 +251,16 @@ The sheet, scaled to at most 4096 px on its long edge, with the final result dra
 
 ### `summary.json`
 
-The run's status, source file, model, sheet counts, total token usage and cost, the result entry of
-every page (the sheet summary above, or the failure), plant-graph statistics, and the S3 URIs of
-the plant outputs.
+The run's status (`SUCCEEDED`, `PARTIAL` or `FAILED`), execution ARN, source file, model, sheet
+counts, total token usage and cost, the result entry of every page (the sheet summary above, or the
+failure), plant-graph statistics, and the S3 URIs of the plant outputs.
+
+### `overlays/<sheet>.overlay.png`
+
+A copy of each successful sheet's `overlay.png`, under one prefix, so the
+[SDMA connector](SDMA_CONNECTOR.md) can ingest them all at once.
+
+### `_FAILED.json`
+
+Written only when the run produced no plant graph: `{"message", "summary"}` when every sheet
+failed, or `{"message": "<Error>: <Cause>"}` when `PrepareInput` or `MergeSheets` failed. The SDMA connector's wait step fails as soon as it appears.

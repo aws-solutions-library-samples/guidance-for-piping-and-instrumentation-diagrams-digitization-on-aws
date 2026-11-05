@@ -1,4 +1,6 @@
 import * as cdk from 'aws-cdk-lib';
+import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as sfn from 'aws-cdk-lib/aws-stepfunctions';
 import { Construct } from 'constructs';
 import { NagSuppressions } from 'cdk-nag';
 
@@ -20,6 +22,10 @@ export interface PNIDDigitizationStackProps extends cdk.StackProps {
 
 /** Buckets, agent runtime, Lambdas and workflow. The network lives in PNIDNetworkStack. */
 export class PNIDDigitizationStack extends cdk.Stack {
+  /** For the optional SDMA connector stack (lib/sdma-stack.ts). */
+  public readonly stateMachine: sfn.IStateMachine;
+  public readonly outputBucket: s3.IBucket;
+
   constructor(scope: Construct, id: string, props: PNIDDigitizationStackProps) {
     super(scope, id, props);
 
@@ -42,11 +48,13 @@ export class PNIDDigitizationStack extends cdk.Stack {
       outputBucket: storage.outputBucket,
       runtime: agent.runtime,
       digitization: config.digitization,
+      sdma: config.sdma,
       vpcConfig,
     });
 
     const orchestration = new OrchestrationConstruct(this, 'Orchestration', {
       inputBucket: storage.inputBucket,
+      outputBucket: storage.outputBucket,
       prepareInput: functions.prepareInput,
       dispatchSheet: functions.dispatchSheet,
       mergeSheets: functions.mergeSheets,
@@ -55,6 +63,9 @@ export class PNIDDigitizationStack extends cdk.Stack {
       heartbeatTimeout: cdk.Duration.seconds(HEARTBEAT_SECONDS * 5),
       uploadTrigger: config.orchestration.uploadTrigger,
     });
+
+    this.stateMachine = orchestration.stateMachine;
+    this.outputBucket = storage.outputBucket;
 
     NagSuppressions.addStackSuppressions(this, [
       {

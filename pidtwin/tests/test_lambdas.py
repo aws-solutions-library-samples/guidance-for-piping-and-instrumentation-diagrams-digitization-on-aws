@@ -46,6 +46,13 @@ class FakeS3:
     def get_object(self, Bucket, Key):
         return {"Body": io.BytesIO(self.objects[Bucket, Key])}
 
+    def copy_object(self, Bucket, Key, CopySource):
+        from botocore.exceptions import ClientError
+        src = CopySource["Bucket"], CopySource["Key"]
+        if src not in self.objects:
+            raise ClientError({"Error": {"Code": "NoSuchKey"}}, "CopyObject")
+        self.objects[Bucket, Key] = self.objects[src]
+
 
 def load(name, env):
     with mock.patch.dict(os.environ, {"AWS_DEFAULT_REGION": "us-east-1", **env}):
@@ -104,6 +111,17 @@ class PrepareInput(unittest.TestCase):
                 self.mod.lambda_handler({"bucket": "in", "executionName": "x", **event}, None)
             self.assertIn(msg, str(e.exception))
 
+    def test_sdma_content_is_named_by_file_name(self):
+        mod = load("prepare_input", {"INPUT_BUCKET": "in", "OUTPUT_BUCKET": "out", "SOURCE_BUCKETS": '["in", "sdma"]',
+                                     "DEFAULT_CONFIG": json.dumps(DEFAULTS), "ALLOWED_MODEL_IDS": json.dumps(ALLOWED)})
+        mod.s3.objects["sdma", "9f86d081884c7d65"] = png_bytes()
+        out = mod.lambda_handler({"bucket": "sdma", "key": "9f86d081884c7d65", "fileName": "Area 1.png",
+                                  "executionName": "run1"}, None)
+        self.assertEqual(out["pages"][0]["sheetId"], "Area_1")
+        self.assertEqual(out["source"]["fileName"], "Area 1.png")
+        with self.assertRaises(mod.InputError):  # without the name there is no file type
+            mod.lambda_handler({"bucket": "sdma", "key": "9f86d081884c7d65", "executionName": "run2"}, None)
+
 
 class MergeSheets(unittest.TestCase):
     def setUp(self):
@@ -115,8 +133,10 @@ class MergeSheets(unittest.TestCase):
         s3 = self.mod.s3
         for sid in ("a", "b"):
             s3.objects["out", f"ex/sheets/{sid}/graph.json"] = build_graph(SHEET, sheet=sid).model_dump_json().encode()
+        s3.objects["out", "ex/sheets/a/overlay.png"] = b"png"
         usage = {"inputTokens": 10, "outputTokens": 5}
-        results = [{"status": "SUCCEEDED", "sheetId": s, "outputPrefix": f"ex/sheets/{s}/", "usage": usage, "usd": 0.5}
+        # successes are the agent's sheet summary (sheet_id); failures come from the SheetFailed state (sheetId)
+        results = [{"status": "SUCCEEDED", "sheet_id": s, "outputPrefix": f"ex/sheets/{s}/", "usage": usage, "usd": 0.5}
                    for s in ("a", "b")] + [{"status": "FAILED", "sheetId": "c", "error": "ThrottlingException"}]
         out = self.mod.lambda_handler({"bucket": "out", "prefix": "ex/", "results": results,
                                        "config": {"modelId": ALLOWED[0]}}, None)
@@ -125,6 +145,9 @@ class MergeSheets(unittest.TestCase):
         self.assertEqual(out["usd"], 1.0)
         for name in ("plant.graph.json", "plant.issues.json", "plant.dexpi.xml", "plant.dot", "summary.json"):
             self.assertIn(("out", f"ex/{name}"), s3.objects)
+        self.assertEqual(s3.objects["out", "ex/overlays/a.overlay.png"], b"png")
+        self.assertNotIn(("out", "ex/overlays/b.overlay.png"), s3.objects)  # b has no overlay: skipped, not fatal
+        self.assertNotIn(("out", "ex/_FAILED.json"), s3.objects)
         summary = json.loads(s3.objects["out", "ex/summary.json"])
         self.assertEqual(summary["usage"]["inputTokens"], 20)
 
@@ -133,6 +156,7 @@ class MergeSheets(unittest.TestCase):
                                        "results": [{"status": "FAILED", "sheetId": "a"}]}, None)
         self.assertEqual(out["status"], "FAILED")
         self.assertEqual(list(out["outputs"]), ["summary"])
+        self.assertIn("1 sheet", json.loads(self.mod.s3.objects["out", "ex/_FAILED.json"])["message"])
 
 
 class DispatchSheet(unittest.TestCase):
@@ -156,6 +180,38 @@ class DispatchSheet(unittest.TestCase):
         reply = "busy"
         with self.assertRaises(RuntimeError):
             mod.lambda_handler(event, None)
+
+
+class SdmaStart(unittest.TestCase):
+    def setUp(self):
+        self.mod = load("sdma_start", {"STATE_MACHINE_ARN": "arn:aws:states:us-east-1:1:stateMachine:sm",
+                                       "CONTENT_BUCKET": "sdma", "OUTPUT_BUCKET": "out"})
+        self.calls = []
+        calls = self.calls
+
+        class Sfn:
+            def start_execution(self, **kw):
+                calls.append(kw)
+                return {"executionArn": f"arn:aws:states:us-east-1:1:execution:sm:{kw['name']}"}
+        self.mod.sfn = Sfn()
+
+    def test_starts_named_execution_with_overrides(self):
+        out = self.mod.lambda_handler({"runId": "inv-1", "s3Uri": "s3://sdma/ab/cd", "path": "plans/Area 1.PDF",
+                                       "modelId": ALLOWED[1], "detect": "", "reviewModelId": ALLOWED[0]}, None)
+        self.assertEqual(out["outputPrefix"], "s3://out/inv-1/")
+        self.assertEqual(self.calls[0]["name"], "inv-1")
+        self.assertEqual(json.loads(self.calls[0]["input"]),
+                         {"bucket": "sdma", "key": "ab/cd", "fileName": "Area 1.PDF",
+                          "config": {"modelId": ALLOWED[1], "review": {"modelId": ALLOWED[0]}}})
+
+    def test_rejects_bad_events(self):
+        ok = {"runId": "inv-1", "s3Uri": "s3://sdma/ab", "path": "a.png"}
+        for bad, msg in [({"runId": "a b"}, "runId"), ({"s3Uri": "s3://other/ab"}, "content bucket"),
+                         ({"path": "model.ifc"}, "drawing")]:
+            with self.assertRaises(ValueError) as e:
+                self.mod.lambda_handler({**ok, **bad}, None)
+            self.assertIn(msg, str(e.exception))
+        self.assertEqual(self.calls, [])
 
 
 if __name__ == "__main__":

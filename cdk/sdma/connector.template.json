@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "P&ID digitization",
+  "description": "Digitizes uploaded P&ID drawings (PDF or image) with the Guidance for P&ID Digitization on AWS, and attaches the plant graph, DEXPI export, rule violations and per-sheet overlays as derived files.",
+  "securityConfig": {
+    "type": "AssumeRole",
+    "assumeRoleArn": "{{SdmaConnectorRoleArn}}"
+  },
+  "lambdaConfig": {
+    "region": "{{Region}}",
+    "functionArn": "{{SdmaStartFunctionArn}}"
+  },
+  "fieldMappings": [
+    { "source": "parameters.connectorInvocationId", "target": "runId" },
+    { "source": "file.s3Uri", "target": "s3Uri" },
+    { "source": "file.path", "target": "path" },
+    { "source": "parameters.modelId", "target": "modelId" },
+    { "source": "parameters.detect", "target": "detect" },
+    { "source": "parameters.reviewModelId", "target": "reviewModelId" }
+  ],
+  "failurePolicy": {
+    "maxFailures": 5,
+    "windowMinutes": 10,
+    "onExceeded": "disable"
+  },
+  "triggers": [
+    {
+      "description": "Digitize each uploaded drawing, wait for the workflow, and ingest its results.",
+      "resources": ["file"],
+      "events": ["upload", "onDemand"],
+      "filter": { "fileNameRegex": "(?i).*\\.(pdf|png|jpe?g|tiff?|webp)$" },
+      "parameterDefinitions": {
+        "modelId": {
+          "type": "string",
+          "description": "Bedrock model for detection; empty for the deployment default. Must be in digitization.allowedModelIds."
+        },
+        "detect": {
+          "type": "string",
+          "allowedValues": ["tiled", "single"],
+          "description": "Detection mode; empty for the deployment default."
+        },
+        "reviewModelId": {
+          "type": "string",
+          "description": "Bedrock model for the review; empty for the deployment default."
+        }
+      },
+      "steps": [
+        {
+          "stepType": "lambdaInvoke",
+          "description": "Start the digitization workflow for this file.",
+          "payload": { "fields": ["runId", "s3Uri", "path", "modelId", "detect", "reviewModelId"] }
+        },
+        {
+          "stepType": "wait",
+          "description": "Wait for the plant graph, then ingest the results.",
+          "wait": {
+            "timeoutSeconds": 86400,
+            "poll": { "type": "output", "intervalSeconds": 60 },
+            "failure": { "uri": "s3://{{OutputBucketName}}/${parameters.connectorInvocationId}/_FAILED.json" }
+          },
+          "output": {
+            "metadataAttributes": {
+              "uri": "s3://{{OutputBucketName}}/${parameters.connectorInvocationId}/summary.json",
+              "fieldMappings": [
+                { "source": "status", "target": "file.metadataAttributes.pnidStatus" },
+                { "source": "sheets.total", "target": "file.metadataAttributes.pnidSheets:number" },
+                { "source": "sheets.succeeded", "target": "file.metadataAttributes.pnidSheetsSucceeded:number" },
+                { "source": "plant.nodes", "target": "file.metadataAttributes.pnidNodes:number" },
+                { "source": "plant.edges", "target": "file.metadataAttributes.pnidEdges:number" },
+                { "source": "modelId", "target": "file.metadataAttributes.pnidModelId" },
+                { "source": "usd", "target": "file.metadataAttributes.pnidCostUsd:number" },
+                { "source": "execution", "target": "file.metadataAttributes.pnidExecutionArn" },
+                { "source": "modelId", "target": "derivedFile.metadataAttributes.pnidModelId" }
+              ]
+            },
+            "derivedFiles": [
+              {
+                "uri": "s3://{{OutputBucketName}}/${parameters.connectorInvocationId}/",
+                "filter": { "fileNameRegex": "plant\\.(dexpi\\.xml|graph\\.json|issues\\.json)$" }
+              },
+              {
+                "uri": "s3://{{OutputBucketName}}/${parameters.connectorInvocationId}/overlays/",
+                "filter": { "fileExtensionFilter": ".png" },
+                "preview": true
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

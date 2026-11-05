@@ -336,7 +336,9 @@ Everything for a run goes under `s3://<OutputBucketName>/<execution name>/`:
 ├── plant.issues.json
 ├── plant.dexpi.xml
 ├── plant.dot
-└── summary.json               per-sheet status, token usage, cost
+├── overlays/<sheet>.overlay.png  copy of each sheet's overlay
+├── summary.json               per-sheet status, token usage, cost
+└── _FAILED.json               only if the run produced no plant graph
 ```
 
 The formats are described in the [API reference](docs/API_REFERENCE.md). The DEXPI export follows
@@ -373,6 +375,7 @@ From `cdk/`, `npm test` type-checks the CDK app and runs the same tests.
 - [How digitization works](docs/DIGITIZATION_PIPELINE.md): detect, trace and review stages; which steps are model calls
 - [Configuration](docs/CONFIGURATION.md): deployment and per-run settings, choosing a model, networking
 - [API reference](docs/API_REFERENCE.md): workflow input, Lambda and agent payloads, output formats, graph convention
+- [SDMA connector](docs/SDMA_CONNECTOR.md): digitize drawings uploaded to Spatial Data Management on AWS (optional)
 - [Troubleshooting](docs/TROUBLESHOOTING.md): model access, throttling, timeouts, failed sheets
 - [CDK stack](cdk/README.md): what the stack creates and how the code is packaged
 
