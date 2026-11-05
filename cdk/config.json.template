@@ -42,5 +42,11 @@
       "enabled": true,
       "prefix": "drawings/"
     }
+  },
+  "sdma": {
+    "enabled": false,
+    "contentBucketName": "",
+    "contentBucketKmsKeyArn": "",
+    "trustedRoleArns": []
   }
 }

@@ -4,8 +4,9 @@ Checks the uploaded drawing, merges the per-execution config over the deployment
 writes one PNG per sheet to <execution>/pages/ in the output bucket (PDFs are rendered page by page;
 images are copied). Returns the page list the Map state fans out over.
 
-Event (manual StartExecution or the S3 upload rule):
+Event (manual StartExecution, the S3 upload rule, or the SDMA connector):
   {"bucket": "<input bucket>", "key": "drawings/x.pdf", "config": {...optional overrides...},
+   "fileName": "<optional; names the file when the key has no extension, as in SDMA's content store>",
    "executionName": "<from the state machine context>"}
 """
 import copy
@@ -29,6 +30,8 @@ log.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
 s3 = get_client("s3")
 INPUT_BUCKET = os.environ["INPUT_BUCKET"]
 OUTPUT_BUCKET = os.environ["OUTPUT_BUCKET"]
+# the input bucket, plus the SDMA content bucket when the connector is deployed
+SOURCE_BUCKETS = json.loads(os.environ.get("SOURCE_BUCKETS") or "[]") or [INPUT_BUCKET]
 DEFAULT_CONFIG = json.loads(os.environ["DEFAULT_CONFIG"])
 ALLOWED_MODEL_IDS = json.loads(os.environ["ALLOWED_MODEL_IDS"])
 IMAGE_TYPES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp"}
@@ -86,17 +89,18 @@ def sheet_id(stem):
 
 def lambda_handler(event, context):
     bucket = event.get("bucket") or INPUT_BUCKET
-    if bucket != INPUT_BUCKET:
+    if bucket not in SOURCE_BUCKETS:
         raise InputError(f"drawings must be uploaded to the input bucket {INPUT_BUCKET}")
     key, meta = head(bucket, event["key"])
-    ext = Path(key).suffix.lower()
+    name = Path(event.get("fileName") or key).name
+    ext = Path(name).suffix.lower()
     if ext not in IMAGE_TYPES | {".pdf"}:
         raise InputError(f"unsupported file type {ext!r}; use PDF or one of {sorted(IMAGE_TYPES)}")
     if meta["ContentLength"] > MAX_INPUT_BYTES:
         raise InputError(f"file is {meta['ContentLength'] / 2**20:.0f} MB; the limit is {MAX_INPUT_BYTES / 2**20:.0f} MB")
     cfg = check_config(merge(DEFAULT_CONFIG, event.get("config")))
     prefix = f"{event['executionName']}/"
-    stem = sheet_id(Path(key).stem)
+    stem = sheet_id(Path(name).stem)
 
     pages = []
     with tempfile.TemporaryDirectory() as tmp:
@@ -119,7 +123,8 @@ def lambda_handler(event, context):
             pages.append({"sheetId": sid, "pageKey": page_key, "outputPrefix": f"{prefix}sheets/{sid}/"})
     log.info("s3://%s/%s -> %d page(s), model %s", bucket, key, len(pages), cfg["modelId"])
 
-    manifest = {"source": {"bucket": bucket, "key": key, "versionId": meta.get("VersionId")},
+    manifest = {"source": {"bucket": bucket, "key": key, "versionId": meta.get("VersionId"),
+                           **({"fileName": name} if event.get("fileName") else {})},
                 "config": cfg, "pages": pages}
     s3.put_object(Bucket=OUTPUT_BUCKET, Key=f"{prefix}input.json", Body=json.dumps(manifest, indent=2),
                   ContentType="application/json")

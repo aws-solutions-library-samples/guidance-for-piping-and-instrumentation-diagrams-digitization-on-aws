@@ -1,6 +1,7 @@
 import * as cdk from 'aws-cdk-lib';
 import * as agentcore from 'aws-cdk-lib/aws-bedrockagentcore';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
@@ -8,7 +9,7 @@ import { Construct } from 'constructs';
 import { NagSuppressions } from 'cdk-nag';
 import * as path from 'path';
 import { pythonBundle } from '../bundling';
-import { DigitizationConfig, digitizationDefaults } from '../config';
+import { DigitizationConfig, StackConfig, digitizationDefaults } from '../config';
 import { userAgentEnvironment } from '../solution';
 
 export interface FunctionsConstructProps {
@@ -16,6 +17,8 @@ export interface FunctionsConstructProps {
   outputBucket: s3.IBucket;
   runtime: agentcore.IBedrockAgentRuntime;
   digitization: DigitizationConfig;
+  /** When enabled, PrepareInput also reads drawings from the SDMA content bucket. */
+  sdma: StackConfig['sdma'];
   vpcConfig?: { vpc: ec2.IVpc; vpcSubnets: ec2.SubnetSelection; securityGroups: ec2.ISecurityGroup[] };
 }
 
@@ -54,6 +57,7 @@ export class FunctionsConstruct extends Construct {
       return fn;
     };
 
+    const sdmaBucket = props.sdma.enabled ? props.sdma.contentBucketName : undefined;
     this.prepareInput = make('PrepareInput', 'prepare_input', true, {
       description: 'Validates a drawing, merges config, renders PDF pages to PNG',
       timeout: cdk.Duration.minutes(10),
@@ -64,9 +68,23 @@ export class FunctionsConstruct extends Construct {
         OUTPUT_BUCKET: props.outputBucket.bucketName,
         DEFAULT_CONFIG: JSON.stringify(digitizationDefaults(props.digitization)),
         ALLOWED_MODEL_IDS: JSON.stringify(props.digitization.allowedModelIds),
+        SOURCE_BUCKETS: JSON.stringify([props.inputBucket.bucketName, ...(sdmaBucket ? [sdmaBucket] : [])]),
       },
     });
     props.inputBucket.grantRead(this.prepareInput);
+    if (sdmaBucket) {
+      // drawings the SDMA connector hands over (lib/sdma-stack.ts), read in place from SDMA's content store
+      this.prepareInput.addToRolePolicy(new iam.PolicyStatement({
+        actions: ['s3:GetObject'],
+        resources: [`arn:aws:s3:::${sdmaBucket}/*`],
+      }));
+      if (props.sdma.contentBucketKmsKeyArn) {
+        this.prepareInput.addToRolePolicy(new iam.PolicyStatement({
+          actions: ['kms:Decrypt'],
+          resources: [props.sdma.contentBucketKmsKeyArn],
+        }));
+      }
+    }
     props.outputBucket.grantWrite(this.prepareInput);
 
     this.dispatchSheet = make('DispatchSheet', 'dispatch_sheet', false, {
@@ -89,7 +107,7 @@ export class FunctionsConstruct extends Construct {
         {
           id: 'AwsSolutions-IAM5',
           reason: 'CDK grant wildcards scoped to this stack: objects in its own buckets, their KMS keys, '
-            + 'and the agent runtime\'s endpoints (<runtime ARN>/*)',
+            + 'the agent runtime\'s endpoints (<runtime ARN>/*), and objects in the SDMA content bucket when enabled',
         },
       ], true);
     }
