@@ -1,4 +1,5 @@
 import * as cdk from 'aws-cdk-lib';
+import * as agentcore from 'aws-cdk-lib/aws-bedrockagentcore';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as sfn from 'aws-cdk-lib/aws-stepfunctions';
 import { Construct } from 'constructs';
@@ -25,6 +26,7 @@ export class PNIDDigitizationStack extends cdk.Stack {
   /** For the optional SDMA connector stack (lib/sdma-stack.ts). */
   public readonly stateMachine: sfn.IStateMachine;
   public readonly outputBucket: s3.IBucket;
+  public readonly runtime: agentcore.IBedrockAgentRuntime;
 
   constructor(scope: Construct, id: string, props: PNIDDigitizationStackProps) {
     super(scope, id, props);
@@ -66,6 +68,7 @@ export class PNIDDigitizationStack extends cdk.Stack {
 
     this.stateMachine = orchestration.stateMachine;
     this.outputBucket = storage.outputBucket;
+    this.runtime = agent.runtime;
 
     NagSuppressions.addStackSuppressions(this, [
       {

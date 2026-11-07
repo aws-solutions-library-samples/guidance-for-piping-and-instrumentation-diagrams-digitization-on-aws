@@ -51,6 +51,7 @@ if (config.sdma.enabled) {
     networking: network.networking,
     stateMachine: digitization.stateMachine,
     outputBucket: digitization.outputBucket,
+    runtime: digitization.runtime,
   });
 }
 
