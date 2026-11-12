@@ -158,6 +158,23 @@ class MergeSheets(unittest.TestCase):
         self.assertEqual(out["status"], "FAILED")
         self.assertEqual(list(out["outputs"]), ["summary"])
         self.assertIn("1 sheet", json.loads(self.mod.s3.objects["out", "ex/_FAILED.json"])["message"])
+        review = json.loads(self.mod.s3.objects["out", "ex/summary.json"])["review"]
+        self.assertEqual(review, {"needed": True, "reasons": ["1 sheet(s) failed: a"]})
+
+    def test_review_reasons(self):
+        from pidtwin.graph.schema import Graph, Node
+        from pidtwin.graph.validate import Issue
+        ok = {"status": "SUCCEEDED", "sheet_id": "a", "review": {"finished": True}}
+        self.assertEqual(self.mod.review([ok]), {"needed": False, "reasons": []})
+        routine = [Issue(level="warning", code="valve_degree", node="v1", message="")]
+        self.assertFalse(self.mod.review([ok], issues=routine)["needed"])  # routine warnings alone: no review
+        issues = routine + [Issue(level="warning", code="dangling_pipe", node=f"p{i}", message="") for i in range(2)]
+        plant = Graph(source="pid", sheets=[{"id": "a"}, {"id": "b"}],
+                      nodes=[Node(id="a/X", category="offpage", attrs={"stitched_to": "b/X"}),
+                             Node(id="b/Y", category="offpage")])
+        out = self.mod.review([ok, {**ok, "sheet_id": "b", "review": {"finished": False}}], plant, issues)
+        self.assertEqual(out["reasons"], ["review stopped early on b", "2 dangling pipes",
+                                          "1 off-page connector(s) not joined across sheets"])
 
 
 class DispatchSheet(unittest.TestCase):
@@ -284,8 +301,8 @@ class SdmaStages(unittest.TestCase):
         mod, index = load_sdma("merge_sheets", {"OUTPUT_BUCKET": "out", "CONTENT_BUCKET": "sdma"})
         index.s3 = s3 = FakeS3()
         pages = [{"sheetId": s, "pageKey": f"r1/pages/{s}.png", "outputPrefix": f"r1/sheets/{s}/"} for s in ("a", "b")]
-        s3.objects["out", "r1/input.json"] = json.dumps({"source": {}, "config": {"modelId": ALLOWED[0]},
-                                                         "pages": pages}).encode()
+        s3.objects["out", "r1/input.json"] = json.dumps({"source": {"fileName": "Area 7.pdf"},
+                                                         "config": {"modelId": ALLOWED[0]}, "pages": pages}).encode()
         result_a = {"status": "SUCCEEDED", "sheet_id": "a", "outputPrefix": "r1/sheets/a/", "usage": {}, "usd": 0.2}
         s3.objects["out", "r1/sheets/a/graph.json"] = build_graph(SHEET, sheet="a").model_dump_json().encode()
         s3.objects["out", "r1/sheets/a/result.json"] = json.dumps(result_a).encode()
@@ -294,13 +311,22 @@ class SdmaStages(unittest.TestCase):
 
         out = mod.lambda_handler(event, None)  # sheet b not done yet
         self.assertEqual((out["status"], out["sheetsDone"], out["sheets"]), ("PENDING", 1, 2))
+        self.assertEqual((out["reviewNeeded"], out["reviewReasons"]), (False, ""))
         self.assertEqual(out["plantPrefix"], "s3://out/r1/")
         self.assertNotIn(("out", "r1/plant.graph.json"), s3.objects)
+        self.assertNotIn(("out", "r1/review/Area_7.review.json"), s3.objects)
 
         s3.objects["out", "r1/sheets/b/result.json"] = json.dumps(
             {"status": "FAILED", "sheet_id": "b", "outputPrefix": "r1/sheets/b/", "error": "TimeoutError"}).encode()
         out = mod.lambda_handler(event, None)  # the last sheet's run merges
         self.assertEqual((out["status"], out["sheetsDone"]), ("PARTIAL", 2))
+        self.assertTrue(out["reviewNeeded"])
+        self.assertIn("1 sheet(s) failed: b", out["reviewReasons"])
+        self.assertEqual(out["reviewPrefix"], "s3://out/r1/review/")
+        # the alert connector starts when this file is attached
+        review_file = json.loads(s3.objects["out", "r1/review/Area_7.review.json"])
+        self.assertEqual(review_file["status"], "PARTIAL")
+        self.assertIn("1 sheet(s) failed: b", review_file["reasons"])
         self.assertGreater(out["nodes"], 0)
         for name in ("plant.graph.json", "plant.dexpi.xml", "plant.issues.json", "summary.json"):
             self.assertIn(("out", f"r1/{name}"), s3.objects)

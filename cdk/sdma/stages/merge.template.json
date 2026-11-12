@@ -33,13 +33,19 @@
                 { "source": "sheets", "target": "asset.metadataAttributes.pnidSheets:number" },
                 { "source": "nodes", "target": "asset.metadataAttributes.pnidPlantNodes:number" },
                 { "source": "edges", "target": "asset.metadataAttributes.pnidPlantEdges:number" },
-                { "source": "usd", "target": "asset.metadataAttributes.pnidCostUsd:number" }
+                { "source": "usd", "target": "asset.metadataAttributes.pnidCostUsd:number" },
+                { "source": "reviewNeeded", "target": "asset.metadataAttributes.pnidReviewNeeded:boolean" },
+                { "source": "reviewReasons", "target": "asset.metadataAttributes.pnidReviewReasons" }
               ]
             },
             "siblingDerivedFiles": [
               {
                 "uri": "${response.plantPrefix}",
                 "filter": { "fileNameRegex": "(plant\\.(dexpi\\.xml|graph\\.json|issues\\.json)|summary\\.json)$" }
+              },
+              {
+                "uri": "${response.reviewPrefix}",
+                "filter": { "fileNameRegex": ".*\\.review\\.json$" }
               }
             ]
           }

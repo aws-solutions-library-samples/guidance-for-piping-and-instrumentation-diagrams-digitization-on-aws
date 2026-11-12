@@ -7,11 +7,17 @@ connector ingests nothing; the run of the last sheet to finish sees them all and
 trigger fires only after its own sheet's results were written, so the last one cannot miss any.
 
 Event (the connector's field mappings): {"s3Uri": "<file.s3Uri of the result.json>"}
-Returns plantPrefix (always: the connector's siblingDerivedFiles read it, and its filter matches
-nothing before the merge), status (PENDING, SUCCEEDED, PARTIAL or FAILED), and the run's counts.
+When the merged result needs a review, it also writes <runId>/review/<drawing>.review.json. The merge
+connector attaches that file next to the drawing, and its upload starts the review alert: SDMA 1.7.0
+raises no asset event for a connector's metadata write, so the alert cannot trigger on the metadata.
+
+Returns plantPrefix and reviewPrefix (always: the connector's siblingDerivedFiles read them, and their
+filters match nothing until there is something to attach), status (PENDING, SUCCEEDED, PARTIAL or
+FAILED), the run's counts, and the review decision (reviewNeeded, reviewReasons).
 """
 import json
 import re
+from pathlib import PurePosixPath
 
 import index
 
@@ -37,8 +43,9 @@ def lambda_handler(event, context):
         except index.s3.exceptions.NoSuchKey:
             pass
     total = len(manifest["pages"])
-    out = {"plantPrefix": f"s3://{OUTPUT_BUCKET}/{run_id}/", "sheets": total, "sheetsDone": len(results),
-           "nodes": 0, "edges": 0, "usd": 0.0}
+    base = f"s3://{OUTPUT_BUCKET}/{run_id}/"
+    out = {"plantPrefix": base, "reviewPrefix": f"{base}review/", "sheets": total, "sheetsDone": len(results),
+           "nodes": 0, "edges": 0, "usd": 0.0, "reviewNeeded": False, "reviewReasons": ""}
     if len(results) < total:
         index.log.info("run %s: %d/%d sheets done, merge later", run_id, len(results), total)
         return {**out, "status": "PENDING"}
@@ -46,6 +53,13 @@ def lambda_handler(event, context):
     merged = index.lambda_handler({"bucket": OUTPUT_BUCKET, "prefix": f"{run_id}/", "source": manifest["source"],
                                    "config": manifest["config"], "results": results}, context)
     summary = _json(OUTPUT_BUCKET, f"{run_id}/summary.json")
-    plant = summary.get("plant") or {}
+    plant, rev = summary.get("plant") or {}, summary.get("review") or {}
+    if rev.get("needed"):
+        source = manifest.get("source") or {}
+        drawing = index.sheet_id(PurePosixPath(source.get("fileName") or source.get("key") or run_id).stem)
+        index.put(OUTPUT_BUCKET, f"{run_id}/review/{drawing}.review.json",
+                  json.dumps({"status": merged["status"], "reasons": rev.get("reasons") or [],
+                              "summary": f"s3://{OUTPUT_BUCKET}/{run_id}/summary.json"}, indent=2), "application/json")
     return {**out, "status": merged["status"], "nodes": plant.get("nodes", 0), "edges": plant.get("edges", 0),
-            "usd": merged["usd"]}
+            "usd": merged["usd"], "reviewNeeded": bool(rev.get("needed")),
+            "reviewReasons": "; ".join(rev.get("reasons") or [])}

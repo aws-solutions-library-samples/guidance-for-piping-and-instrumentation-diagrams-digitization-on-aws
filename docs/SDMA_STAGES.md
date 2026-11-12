@@ -11,7 +11,8 @@ digitized in parallel, one plant graph of 62 nodes and 67 edges, for $0.45.
 |---|---|---|---|---|
 | 1 | P&ID 1 - render pages | Drawing (PDF or image), `upload` or `onDemand` | PrepareInput: validate, render PDF pages | One `<sheet>.page.png` per sheet, as derived files of the drawing. Metadata on the drawing: `pnidRunId`, `pnidPages` |
 | 2 | P&ID 2 - digitize sheet | Each `*.page.png`, `upload` or `onDemand` | Starts the AgentCore agent for the page, then an output-driven `wait` that holds no compute | `<sheet>.graph.json`, `.dexpi.xml`, `.issues.json`, `.result.json` and `.overlay.png` (preview), next to the page. Metadata on the page: status, nodes, edges, cost, model |
-| 3 | P&ID 3 - merge plant | Each `*.result.json`, `upload` or `onDemand` | Once every sheet of the run has a result: MergeSheets | `plant.dexpi.xml`, `plant.graph.json`, `plant.issues.json` and `summary.json`, next to the pages. Metadata on the asset: `pnidPlantStatus`, sheet counts, plant nodes and edges, cost |
+| 3 | P&ID 3 - merge plant | Each `*.result.json`, `upload` or `onDemand` | Once every sheet of the run has a result: MergeSheets | `plant.dexpi.xml`, `plant.graph.json`, `plant.issues.json` and `summary.json`, next to the pages. Metadata on the asset: `pnidPlantStatus`, sheet counts, plant nodes and edges, cost, `pnidReviewNeeded`, `pnidReviewReasons` |
+| 4 | P&ID 4 - review alert (notification) | Each `*.review.json`, `upload` | Sends an in-app message to the project's owners and managers | Nothing; the delivery is an invocation record |
 
 All derived files sit under the drawing, so the Spatial Data Portal shows the pages, the per-sheet
 files and the plant files together. Each sheet has its own invocation record, and a sheet can be
@@ -21,7 +22,31 @@ The connectors are configuration in `cdk/sdma/stages/`. They are rendered with
 `node sdma/render-connector.mjs <stack> stages/<render|digitize|merge>`. The Lambdas reuse the
 existing PrepareInput, DispatchSheet and MergeSheets code, and the agent gains an export mode that
 writes results to S3 instead of calling back a Step Functions task token. Templates that use stage 3
-must declare the asset attributes in `cdk/sdma/stages/template-attributes.json`.
+must declare the asset attributes in `cdk/sdma/stages/template-attributes.json`. The alert is a
+`notification` connector (publish direction), rendered with
+`node sdma/render-connector.mjs <stack> stages/alert`.
+
+## When a result needs review
+
+MergeSheets decides, for both this path and the Step Functions path, and records it in
+`summary.json` (`review.needed`, `review.reasons`). A person should check the result when:
+
+- a sheet failed;
+- the review agent ran out of views on a sheet before it finished;
+- an error, a dangling pipe, unpiped equipment, an isolated item or a duplicate tag remains;
+- off-page connectors were not joined across sheets.
+
+Routine warnings, such as a valve with one connection or a tag that does not match the usual
+pattern, do not ask for a review on their own. Stage 3 writes the decision to the asset. When a
+review is needed, it also attaches `<drawing>.review.json` with the reasons, and that upload starts
+stage 4, which sends a message such as "P&ID area-7 needs review: 1 sheet(s) failed: area-7.p3;
+2 dangling pipes". The alert fires once per merge that needs review, and later edits of the asset
+do not repeat it.
+
+The alert does not trigger on the asset metadata itself, although the docs suggest asset `update`
+for "after the asset's metadata changed". In SDMA 1.7.0, a connector's metadata write raises no asset
+event: asset events come from uploads, Deadline Cloud job completions and deletes. On an asset with
+a single version, they are also classed as `create`, not `update`.
 
 ## How the stages hand over
 
