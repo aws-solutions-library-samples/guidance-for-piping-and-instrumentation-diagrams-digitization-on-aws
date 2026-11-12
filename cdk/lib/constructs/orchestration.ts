@@ -11,6 +11,7 @@ import { NagSuppressions } from 'cdk-nag';
 
 export interface OrchestrationConstructProps {
   inputBucket: s3.IBucket;
+  outputBucket: s3.IBucket;
   prepareInput: lambda.IFunction;
   dispatchSheet: lambda.IFunction;
   mergeSheets: lambda.IFunction;
@@ -31,7 +32,9 @@ const EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'tif', 'tiff', 'webp'];
 
 /**
  * PrepareInput -> Map over pages (DispatchSheet waits on the agent's task token) -> MergeSheets.
- * Started manually with {"bucket", "key", "config"?} or by an upload to the input bucket.
+ * Started manually with {"bucket", "key", "config"?, "fileName"?}, by an upload to the input bucket, or by
+ * the SDMA connector (lib/sdma-stack.ts). A run that fails before or while merging writes
+ * <execution>/_FAILED.json, so a caller watching the output prefix does not wait for a timeout.
  */
 export class OrchestrationConstruct extends Construct {
   public readonly stateMachine: sfn.StateMachine;
@@ -46,13 +49,14 @@ export class OrchestrationConstruct extends Construct {
         'bucket.$': '$.bucket',
         'key.$': '$.key',
         'config.$': '$.config',
+        'fileName.$': '$.fileName',
         executionName: sfn.JsonPath.stringAt('$$.Execution.Name'),
       }),
       payloadResponseOnly: true,
     });
-    // "config" is optional in the execution input
+    // "config" and "fileName" are optional in the execution input
     const defaults = new sfn.Pass(this, 'DefaultConfig', {
-      parameters: { config: {} },
+      parameters: { config: {}, fileName: null },
       resultPath: '$.defaults',
     });
     const withConfig = new sfn.Pass(this, 'MergeInput', {
@@ -109,9 +113,34 @@ export class OrchestrationConstruct extends Construct {
         'source.$': '$.source',
         'config.$': '$.config',
         'results.$': '$.results',
+        execution: sfn.JsonPath.stringAt('$$.Execution.Id'),
       }),
       payloadResponseOnly: true,
     });
+
+    // SDMA reports the "message" of a failure file as the invocation's failure reason
+    const failureMessage = new sfn.Pass(this, 'FailureMessage', {
+      parameters: { message: sfn.JsonPath.format('{}: {}', sfn.JsonPath.stringAt('$.error.Error'), sfn.JsonPath.stringAt('$.error.Cause')) },
+      resultPath: '$.failure',
+    });
+    const recordFailure = new tasks.CallAwsService(this, 'RecordFailure', {
+      comment: 'Write <execution>/_FAILED.json with the error',
+      service: 's3',
+      action: 'putObject',
+      parameters: {
+        Bucket: props.outputBucket.bucketName,
+        Key: sfn.JsonPath.format('{}/_FAILED.json', sfn.JsonPath.stringAt('$$.Execution.Name')),
+        Body: sfn.JsonPath.jsonToString(sfn.JsonPath.objectAt('$.failure')),
+        ContentType: 'application/json',
+      },
+      iamResources: [props.outputBucket.arnForObjects('*')],
+      resultPath: sfn.JsonPath.DISCARD,
+    });
+    failureMessage.next(recordFailure)
+      .next(new sfn.Fail(this, 'RunFailed', { errorPath: '$.error.Error', causePath: '$.error.Cause' }));
+    for (const task of [prepare, merge]) {
+      task.addCatch(failureMessage, { errors: ['States.ALL'], resultPath: '$.error' });
+    }
 
     const done = new sfn.Choice(this, 'AllSheetsDone?')
       .when(sfn.Condition.stringEquals('$.status', 'SUCCEEDED'), new sfn.Succeed(this, 'Succeeded'))
@@ -142,8 +171,9 @@ export class OrchestrationConstruct extends Construct {
       logs: { destination: logGroup, level: sfn.LogLevel.ALL },
       tracingEnabled: true,
     });
+    props.outputBucket.grantPut(this.stateMachine);
     NagSuppressions.addResourceSuppressions(this.stateMachine, [
-      { id: 'AwsSolutions-IAM5', reason: 'Lambda invoke on function versions (:*) and X-Ray / log delivery' },
+      { id: 'AwsSolutions-IAM5', reason: 'Lambda invoke on function versions (:*), X-Ray / log delivery, and _FAILED.json objects in the output bucket' },
     ], true);
 
     if (props.uploadTrigger.enabled) {

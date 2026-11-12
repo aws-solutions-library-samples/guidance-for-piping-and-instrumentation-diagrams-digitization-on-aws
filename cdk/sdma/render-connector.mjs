@@ -1,0 +1,30 @@
+#!/usr/bin/env node
+// Prints the SDMA connector configuration for a deployed <stack>-Sdma stack, filled in from its outputs.
+// Usage (from cdk/): node sdma/render-connector.mjs [<stack name, default PNIDDigitization>] [<template>] > pnid-connector.json
+// <template> is a path under sdma/ without .template.json: connector (default), stages/render, stages/digitize,
+// stages/merge or stages/alert. Further KEY=VALUE arguments fill placeholders that are not stack outputs, such as
+// MergeConnectorId=connector-<id> for stages/alert.
+// Uses the AWS CLI with the current credentials and Region (AWS_REGION / AWS_DEFAULT_REGION / profile).
+import { execFileSync } from 'child_process';
+import { readFileSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
+const base = process.argv[2] || process.env.CDK_STACK_NAME || 'PNIDDigitization';
+const stack = base.endsWith('-Sdma') ? base : `${base}-Sdma`;
+const described = JSON.parse(execFileSync('aws', ['cloudformation', 'describe-stacks', '--stack-name', stack, '--output', 'json'],
+  { encoding: 'utf8' }));
+const outputs = Object.fromEntries((described.Stacks[0].Outputs || []).map((o) => [o.OutputKey, o.OutputValue]));
+// the Region is the fourth field of the stack ARN
+const extra = Object.fromEntries(process.argv.slice(4).map((a) => a.split(/=(.*)/s).slice(0, 2)));
+const values = { ...outputs, Region: described.Stacks[0].StackId.split(':')[3], ...extra };
+
+const name = process.argv[3] || 'connector';
+const template = readFileSync(join(dirname(fileURLToPath(import.meta.url)), `${name}.template.json`), 'utf8');
+const rendered = template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
+  if (!(key in values)) {
+    throw new Error(`stack ${stack} has no output ${key}; is it deployed with sdma.enabled?`);
+  }
+  return values[key];
+});
+process.stdout.write(rendered);

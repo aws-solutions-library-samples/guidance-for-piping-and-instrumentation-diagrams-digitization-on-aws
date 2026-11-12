@@ -3,6 +3,7 @@ import * as cdk from "aws-cdk-lib";
 import { loadConfig } from "./lib/config";
 import { PNIDNetworkStack } from "./lib/network-stack";
 import { PNIDDigitizationStack } from "./lib/pnid-digitization-stack";
+import { PNIDSdmaStack } from "./lib/sdma-stack";
 import { AwsSolutionsChecks } from "cdk-nag";
 import { PrototypeSecurityNagPack } from "./lib/prototype-security";
 import { stackDescription } from "./lib/solution";
@@ -35,12 +36,24 @@ const network = new PNIDNetworkStack(app, `${stackName}-Network`, config, {
   // a supporting stack: its own id suffix, so one install is counted once (lib/solution.ts)
   description: stackDescription("network", "network"),
 });
-new PNIDDigitizationStack(app, stackName, {
+const digitization = new PNIDDigitizationStack(app, stackName, {
   env,
   description: stackDescription(),
   config,
   networking: network.networking,
 });
+// optional connector for Spatial Data Management on AWS (docs/SDMA_CONNECTOR.md)
+if (config.sdma.enabled) {
+  new PNIDSdmaStack(app, `${stackName}-Sdma`, {
+    env,
+    description: stackDescription("sdma", "sdma"),
+    config,
+    networking: network.networking,
+    stateMachine: digitization.stateMachine,
+    outputBucket: digitization.outputBucket,
+    runtime: digitization.runtime,
+  });
+}
 
 // Apply CDK Nag checks at the app level with verbose reporting
 cdk.Aspects.of(app).add(

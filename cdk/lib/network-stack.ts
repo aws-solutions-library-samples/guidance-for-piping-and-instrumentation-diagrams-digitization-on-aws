@@ -25,6 +25,7 @@ export class PNIDNetworkStack extends cdk.Stack {
       endpoints: config.endpoints,
       cidr: config.vpc.cidr,
       availabilityZoneIds: config.vpc.availabilityZoneIds,
+      allowStartExecution: config.sdma.enabled,
     });
     this.networking.addOutputs();
     suppressCdkHelperFindings(this);

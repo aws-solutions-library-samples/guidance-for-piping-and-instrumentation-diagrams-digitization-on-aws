@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "P&ID 2 - digitize sheet",
+  "description": "Prototype stage 2 of the staged P&ID digitization: digitizes one rendered page (detect, trace, review agent, sheet graph) and attaches the sheet graph, DEXPI export, rule violations, overlay and result next to it, as derived files of the drawing.",
+  "securityConfig": {
+    "type": "AssumeRole",
+    "assumeRoleArn": "{{SdmaConnectorRoleArn}}"
+  },
+  "lambdaConfig": {
+    "region": "{{Region}}",
+    "functionArn": "{{SdmaDigitizeSheetFunctionArn}}"
+  },
+  "fieldMappings": [
+    { "source": "parameters.connectorInvocationId", "target": "invocationId" },
+    { "source": "file.assetId", "target": "assetId" },
+    { "source": "file.hash", "target": "hash" },
+    { "source": "file.path", "target": "path" }
+  ],
+  "failurePolicy": { "maxFailures": 5, "windowMinutes": 10, "onExceeded": "disable" },
+  "triggers": [
+    {
+      "description": "Digitize each page that stage 1 rendered.",
+      "resources": ["derivedFile"],
+      "events": ["upload", "onDemand"],
+      "filter": { "fileNameRegex": ".*\\.page\\.png$" },
+      "steps": [
+        {
+          "stepType": "lambdaInvoke",
+          "description": "Start the agent for this page.",
+          "payload": { "fields": ["invocationId", "assetId", "hash", "path"] }
+        },
+        {
+          "stepType": "wait",
+          "description": "Wait for the sheet's result, written last whether the sheet succeeded or failed.",
+          "wait": {
+            "timeoutSeconds": 10800,
+            "poll": { "type": "output", "intervalSeconds": 60 }
+          },
+          "output": {
+            "metadataAttributes": {
+              "uri": "s3://{{OutputBucketName}}/sdma-sheets/${parameters.connectorInvocationId}/",
+              "filter": { "fileNameRegex": ".*\\.result\\.json$" },
+              "fieldMappings": [
+                { "source": "status", "target": "file.metadataAttributes.pnidStatus" },
+                { "source": "graph.nodes", "target": "file.metadataAttributes.pnidNodes:number" },
+                { "source": "graph.edges", "target": "file.metadataAttributes.pnidEdges:number" },
+                { "source": "usd", "target": "file.metadataAttributes.pnidCostUsd:number" },
+                { "source": "model_id", "target": "file.metadataAttributes.pnidModelId" }
+              ]
+            },
+            "siblingDerivedFiles": [
+              {
+                "uri": "${response.exportPrefix}",
+                "filter": { "fileNameRegex": ".*\\.(graph\\.json|dexpi\\.xml|issues\\.json|result\\.json)$" }
+              },
+              {
+                "uri": "${response.exportPrefix}",
+                "filter": { "fileNameRegex": ".*\\.overlay\\.png$" },
+                "preview": true
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

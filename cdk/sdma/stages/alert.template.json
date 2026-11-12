@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "P&ID 4 - review alert",
+  "description": "Prototype: tells the project's owners and managers in the Spatial Data Portal inbox when a digitized P&ID needs a person to check it. Starts when the merge attaches <drawing>.review.json, which it does only for results that need a review.",
+  "notificationConfig": {
+    "recipients": [
+      {
+        "role": "OWNER"
+      },
+      {
+        "role": "MANAGER"
+      }
+    ],
+    "channels": [
+      {
+        "type": "inApp"
+      }
+    ],
+    "severity": "WARNING",
+    "messages": {
+      "file": [
+        "P&ID review needed: ${asset.assetName}",
+        "${asset.metadataAttributes.pnidReviewReasons}",
+        "Plant graph: ${asset.metadataAttributes.pnidPlantStatus}, ${asset.metadataAttributes.pnidSheetsDone} of ${asset.metadataAttributes.pnidSheets} sheets."
+      ]
+    }
+  },
+  "triggers": [
+    {
+      "description": "When the merge attaches a review file.",
+      "resources": [
+        "derivedFile"
+      ],
+      "events": [
+        "upload"
+      ],
+      "filter": {
+        "fileNameRegex": ".*\\.review\\.json$"
+      },
+      "steps": [
+        {
+          "stepType": "notification"
+        }
+      ]
+    }
+  ]
+}

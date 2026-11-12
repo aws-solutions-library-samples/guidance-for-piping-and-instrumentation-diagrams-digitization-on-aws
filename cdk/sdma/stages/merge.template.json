@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "P&ID 3 - merge plant",
+  "description": "Prototype stage 3 of the staged P&ID digitization: when every sheet of a drawing has a result, stitches the sheet graphs into the plant graph and attaches the plant graph, DEXPI export, rule violations and run summary to the drawing.",
+  "securityConfig": {
+    "type": "AssumeRole",
+    "assumeRoleArn": "{{SdmaConnectorRoleArn}}"
+  },
+  "lambdaConfig": {
+    "region": "{{Region}}",
+    "functionArn": "{{SdmaMergePlantFunctionArn}}"
+  },
+  "fieldMappings": [
+    { "source": "file.s3Uri", "target": "s3Uri" }
+  ],
+  "failurePolicy": { "maxFailures": 5, "windowMinutes": 10, "onExceeded": "disable" },
+  "triggers": [
+    {
+      "description": "On each sheet result, merge the plant once every sheet is done.",
+      "resources": ["derivedFile"],
+      "events": ["upload", "onDemand"],
+      "filter": { "fileNameRegex": ".*\\.result\\.json$" },
+      "steps": [
+        {
+          "stepType": "lambdaInvoke",
+          "description": "Merge the sheet graphs if every sheet is done.",
+          "payload": { "fields": ["s3Uri"] },
+          "output": {
+            "metadataAttributes": {
+              "fieldMappings": [
+                { "source": "status", "target": "asset.metadataAttributes.pnidPlantStatus" },
+                { "source": "sheetsDone", "target": "asset.metadataAttributes.pnidSheetsDone:number" },
+                { "source": "sheets", "target": "asset.metadataAttributes.pnidSheets:number" },
+                { "source": "nodes", "target": "asset.metadataAttributes.pnidPlantNodes:number" },
+                { "source": "edges", "target": "asset.metadataAttributes.pnidPlantEdges:number" },
+                { "source": "usd", "target": "asset.metadataAttributes.pnidCostUsd:number" },
+                { "source": "reviewNeeded", "target": "asset.metadataAttributes.pnidReviewNeeded:boolean" },
+                { "source": "reviewReasons", "target": "asset.metadataAttributes.pnidReviewReasons" }
+              ]
+            },
+            "siblingDerivedFiles": [
+              {
+                "uri": "${response.plantPrefix}",
+                "filter": { "fileNameRegex": "(plant\\.(dexpi\\.xml|graph\\.json|issues\\.json)|summary\\.json)$" }
+              },
+              {
+                "uri": "${response.reviewPrefix}",
+                "filter": { "fileNameRegex": ".*\\.review\\.json$" }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -29,6 +29,8 @@ export interface NetworkingConstructProps {
   cidr: string;
   /** AZ IDs (e.g. usw2-az1) of the created subnets; default: the first two AgentCore supports in the Region. */
   availabilityZoneIds?: string[];
+  /** Also allow states:StartExecution through the Step Functions endpoint (the SDMA connector's bridge Lambda). */
+  allowStartExecution?: boolean;
 }
 
 /**
@@ -107,7 +109,7 @@ export class NetworkingConstruct extends Construct {
     ]);
 
     if (this.created || props.createVpcEndpoints) {
-      this.createVpcEndpoints(endpoints, routeTableIds);
+      this.createVpcEndpoints(endpoints, routeTableIds, props.allowStartExecution ?? false);
     }
   }
 
@@ -155,7 +157,7 @@ export class NetworkingConstruct extends Construct {
     return { vpc, subnets };
   }
 
-  private createVpcEndpoints(flags: EndpointFlags, routeTableIds: string[] | undefined): void {
+  private createVpcEndpoints(flags: EndpointFlags, routeTableIds: string[] | undefined, allowStartExecution: boolean): void {
     const region = cdk.Stack.of(this).region;
     const account = cdk.Stack.of(this).account;
 
@@ -189,6 +191,9 @@ export class NetworkingConstruct extends Construct {
     if (flags.stepFunctions) {
       iface('StepFunctions', ec2.InterfaceVpcEndpointAwsService.STEP_FUNCTIONS, [
         allow(['states:SendTaskSuccess', 'states:SendTaskFailure', 'states:SendTaskHeartbeat'], ['*']),
+        ...(allowStartExecution
+          ? [allow(['states:StartExecution'], [`arn:aws:states:${region}:${account}:stateMachine:*`])]
+          : []),
       ]);
     }
     if (flags.logs) {

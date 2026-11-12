@@ -28,7 +28,9 @@ There are two levels of settings:
     "maxConcurrentSheets": 4,
     "sheetTimeoutMinutes": 120,
     "uploadTrigger": { "enabled": true, "prefix": "drawings/" }
-  }
+  },
+  "sdma": { "enabled": false, "contentBucketName": "", "contentBucketKmsKeyArn": "",
+            "trustedRoleArns": [] }
 }
 ```
 
@@ -132,6 +134,19 @@ The upload trigger starts one execution per file, and `maxConcurrentSheets` appl
 execution. If you upload a large batch at once, many sheets will run together, and Bedrock may
 throttle them. Throttled sheets are retried, but for big batches it is better to start executions
 yourself at a controlled rate, or to raise your Bedrock quotas first.
+
+### `sdma`: Spatial Data Management on AWS connector
+
+Off by default. When `enabled` is `true`, `cdk deploy --all` also deploys a `<stack>-Sdma` stack,
+and the workflow can read drawings from SDMA's content bucket. See
+[SDMA connector](SDMA_CONNECTOR.md) for where to find each value.
+
+| Key | Meaning |
+|---|---|
+| `enabled` | Deploy the connector stack. |
+| `contentBucketName` | SDMA's content bucket, in the same account and Region. |
+| `contentBucketKmsKeyArn` | KMS key of that bucket if it uses SSE-KMS; empty otherwise. |
+| `trustedRoleArns` | Execution roles of SDMA's `ConnectorInvocationFunction` and `ConnectorInvocationAsyncFunction`, which run the connector, and `ResourceOperationFunction`, which checks the role when you create the connector. They are trusted to assume the connector role. |
 
 ### `vpc` and `endpoints`: networking
 
