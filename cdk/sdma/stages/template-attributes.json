@@ -1,0 +1,10 @@
+[
+  {"name": "pnidPlantStatus", "type": "enum", "value": {"enum": ["PENDING", "SUCCEEDED", "PARTIAL", "FAILED"]}, "options": {"displayName": "P&ID plant status", "order": 100}},
+  {"name": "pnidSheets", "type": "number", "options": {"displayName": "P&ID sheets", "order": 101}},
+  {"name": "pnidSheetsDone", "type": "number", "options": {"displayName": "P&ID sheets done", "order": 102}},
+  {"name": "pnidPlantNodes", "type": "number", "options": {"displayName": "P&ID plant nodes", "order": 103}},
+  {"name": "pnidPlantEdges", "type": "number", "options": {"displayName": "P&ID plant edges", "order": 104}},
+  {"name": "pnidCostUsd", "type": "number", "options": {"displayName": "P&ID digitization cost (USD)", "order": 105}},
+  {"name": "pnidReviewNeeded", "type": "boolean", "options": {"displayName": "P&ID review needed", "order": 106}},
+  {"name": "pnidReviewReasons", "type": "string", "options": {"displayName": "P&ID review reasons", "order": 107}}
+]

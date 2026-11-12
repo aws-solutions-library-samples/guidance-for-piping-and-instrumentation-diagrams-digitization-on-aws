@@ -70,5 +70,38 @@ class Callbacks(unittest.TestCase):
         thread.return_value.start.assert_called_once()
 
 
+class SdmaExport(unittest.TestCase):
+    EXPORT = {**{k: v for k, v in PAYLOAD.items() if k != "taskToken"},
+              "export": {"prefix": "sdma-sheets/inv/", "name": "a"}}
+
+    def test_success_copies_outputs_then_writes_result_last(self):
+        mod = load()
+        with mock.patch.object(mod, "digitize_sheet", return_value={"sheet_id": "a", "usd": 0.1}):
+            mod._background_export(dict(self.EXPORT), mod.app.add_async_task("t"))
+        copied = [c.kwargs["Key"] for c in mod.s3.copy_object.call_args_list]
+        self.assertEqual(copied, [f"sdma-sheets/inv/a.{f}" for f in mod.EXPORTED])
+        keys = [c.kwargs["Key"] for c in mod.s3.put_object.call_args_list]
+        self.assertEqual(keys, ["ex/sheets/a/result.json", "sdma-sheets/inv/a.result.json"])  # the export last
+        put = mod.s3.put_object.call_args.kwargs
+        body = json.loads(put["Body"])
+        self.assertEqual((put["Key"], body["status"]), ("sdma-sheets/inv/a.result.json", "SUCCEEDED"))
+        self.assertEqual(body["exportPrefix"], "s3://out/sdma-sheets/inv/")  # read as ${response.exportPrefix}
+        mod.sfn.send_task_success.assert_not_called()
+
+    def test_failure_still_writes_result(self):
+        mod = load()
+        with mock.patch.object(mod, "digitize_sheet", side_effect=TimeoutError("model timed out")):
+            mod._background_export(dict(self.EXPORT), mod.app.add_async_task("t"))
+        mod.s3.copy_object.assert_not_called()
+        body = json.loads(mod.s3.put_object.call_args.kwargs["Body"])
+        self.assertEqual((body["status"], body["error"], body["sheet_id"]), ("FAILED", "TimeoutError", "a"))
+
+    def test_entrypoint_accepts_export_mode(self):
+        mod = load()
+        with mock.patch.object(mod.threading, "Thread") as thread:
+            self.assertEqual(mod.invoke(dict(self.EXPORT))["status"], "accepted")
+        self.assertIs(thread.call_args.kwargs["target"], mod._background_export)
+
+
 if __name__ == "__main__":
     unittest.main()

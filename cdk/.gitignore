@@ -3,4 +3,4 @@ cdk.out
 cdk.context.json
 dist/
 config.json
-pnid-connector.json
+pnid-*.json

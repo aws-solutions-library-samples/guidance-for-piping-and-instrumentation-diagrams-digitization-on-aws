@@ -12,6 +12,13 @@ Payload:
    "dashedAsPiping": false}, "taskToken": "..."}
 Without taskToken the sheet is digitized synchronously and the summary returned (local testing only:
 a long synchronous call blocks the ping endpoint).
+
+SDMA stage mode (docs/SDMA_STAGES.md), from the SDMA DispatchSheet handler: no taskToken but
+"export": {"prefix": "sdma-sheets/<invocation>/", "name": "<sheetId>"}. The sheet is digitized in the
+background as above; then the outputs SDMA ingests are copied to <prefix><name>.<file>, the result
+(the sheet summary, or {"status": "FAILED", ...}) is written to the sheet's own result.json, where
+the SDMA merge stage counts finished sheets, and <prefix><name>.result.json is written last: it is
+what the digitize connector's wait step completes on, success or not.
 """
 import io
 import json
@@ -37,6 +44,8 @@ sfn = get_client("stepfunctions")
 HEARTBEAT_SECONDS = int(os.environ.get("HEARTBEAT_SECONDS", "60"))
 ALLOWED_MODEL_IDS = set(json.loads(os.environ.get("ALLOWED_MODEL_IDS", "[]")))
 OUTPUT_BUCKET = os.environ.get("OUTPUT_BUCKET")
+# per-sheet outputs copied for the SDMA connector; distinct names, since they all land under one drawing
+EXPORTED = ("graph.json", "dexpi.xml", "issues.json", "overlay.png")
 
 
 def digitize(payload):
@@ -87,8 +96,48 @@ def _background(payload, task_id):
         app.complete_async_task(task_id)
 
 
+def _export(payload, result):
+    """Copy the outputs to the export prefix, then write <name>.result.json last (SDMA stage mode).
+
+    result.json carries exportPrefix: the connector's siblingDerivedFiles entries read it as
+    ${response.exportPrefix}, because SDMA 1.7.0 does not resolve ${...} in siblingDerivedFiles URIs
+    of an output-driven wait.
+    """
+    bucket, ex = payload["bucket"], payload["export"]
+    out = f"{ex['prefix']}{ex['name']}"
+    result = {**result, "exportPrefix": f"s3://{bucket}/{ex['prefix']}"}
+    if result.get("status") == "SUCCEEDED":
+        for f in EXPORTED:
+            s3.copy_object(Bucket=bucket, Key=f"{out}.{f}",
+                           CopySource={"Bucket": bucket, "Key": f"{payload['outputPrefix']}{f}"})
+    body = json.dumps(result, default=str)
+    s3.put_object(Bucket=bucket, Key=f"{payload['outputPrefix']}result.json", Body=body,
+                  ContentType="application/json")
+    s3.put_object(Bucket=bucket, Key=f"{out}.result.json", Body=body, ContentType="application/json")
+
+
+def _background_export(payload, task_id):
+    try:
+        try:
+            result = digitize(payload)
+        except Exception as e:  # recorded in result.json, so the sheet still completes in SDMA
+            log.exception("sheet %s failed", payload.get("sheetId"))
+            result = {"status": "FAILED", "sheet_id": payload.get("sheetId"),
+                      "outputPrefix": payload.get("outputPrefix"), "error": type(e).__name__,
+                      "cause": str(e)[:32_000]}
+        _export(payload, result)
+    except Exception:
+        log.exception("could not export sheet %s", payload.get("sheetId"))
+    finally:
+        app.complete_async_task(task_id)
+
+
 @app.entrypoint
 def invoke(payload):
+    if payload.get("export"):
+        task_id = app.add_async_task("digitize_sheet", {"sheetId": payload.get("sheetId")})
+        threading.Thread(target=_background_export, args=(payload, task_id), daemon=True).start()
+        return {"status": "accepted", "sheetId": payload.get("sheetId")}
     if not payload.get("taskToken"):
         return digitize(payload)
     task_id = app.add_async_task("digitize_sheet", {"sheetId": payload.get("sheetId")})

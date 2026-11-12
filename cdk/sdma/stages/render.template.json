@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "P&ID 1 - render pages",
+  "description": "Prototype stage 1 of the staged P&ID digitization: validates an uploaded drawing and renders one page image per sheet as derived files. Each page starts stage 2.",
+  "securityConfig": {
+    "type": "AssumeRole",
+    "assumeRoleArn": "{{SdmaConnectorRoleArn}}"
+  },
+  "lambdaConfig": {
+    "region": "{{Region}}",
+    "functionArn": "{{SdmaRenderPagesFunctionArn}}"
+  },
+  "fieldMappings": [
+    { "source": "parameters.connectorInvocationId", "target": "runId" },
+    { "source": "file.assetId", "target": "assetId" },
+    { "source": "file.s3Uri", "target": "s3Uri" },
+    { "source": "file.path", "target": "path" },
+    { "source": "parameters.modelId", "target": "modelId" },
+    { "source": "parameters.detect", "target": "detect" },
+    { "source": "parameters.reviewModelId", "target": "reviewModelId" }
+  ],
+  "failurePolicy": { "maxFailures": 5, "windowMinutes": 10, "onExceeded": "disable" },
+  "triggers": [
+    {
+      "description": "Render the pages of each uploaded drawing.",
+      "resources": ["file"],
+      "events": ["upload", "onDemand"],
+      "filter": { "fileNameRegex": "(?i).*\\.(pdf|png|jpe?g|tiff?|webp)$" },
+      "parameterDefinitions": {
+        "modelId": { "type": "string", "description": "Bedrock model for detection; empty for the deployment default." },
+        "detect": { "type": "string", "allowedValues": ["tiled", "single"], "description": "Detection mode; empty for the deployment default." },
+        "reviewModelId": { "type": "string", "description": "Bedrock model for the review; empty for the deployment default." }
+      },
+      "steps": [
+        {
+          "stepType": "lambdaInvoke",
+          "description": "Validate the drawing and render its pages.",
+          "payload": { "fields": ["runId", "assetId", "s3Uri", "path", "modelId", "detect", "reviewModelId"] },
+          "output": {
+            "metadataAttributes": {
+              "fieldMappings": [
+                { "source": "runId", "target": "file.metadataAttributes.pnidRunId" },
+                { "source": "pages", "target": "file.metadataAttributes.pnidPages:number" },
+                { "source": "runId", "target": "derivedFile.metadataAttributes.pnidRunId" }
+              ]
+            },
+            "derivedFiles": [
+              { "uri": "${response.pagesPrefix}", "filter": { "fileNameRegex": ".*\\.page\\.png$" } }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -16,7 +16,7 @@ digitize = ["boto3", "pillow>=10.1", "strands-agents"]
 # PDF P&IDs (pidtwin.digitize.pdf)
 pdf = ["pypdfium2"]
 # unit tests (python -m unittest discover tests)
-test = ["defusedxml", "bedrock-agentcore"]
+test = ["defusedxml", "bedrock-agentcore", "xxhash>=3.4"]
 
 [project.scripts]
 pidtwin = "pidtwin.cli:main"

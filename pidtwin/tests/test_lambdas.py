@@ -2,6 +2,7 @@
 
 Run: python -m unittest discover tests
 """
+import importlib
 import importlib.util
 import io
 import json
@@ -157,6 +158,23 @@ class MergeSheets(unittest.TestCase):
         self.assertEqual(out["status"], "FAILED")
         self.assertEqual(list(out["outputs"]), ["summary"])
         self.assertIn("1 sheet", json.loads(self.mod.s3.objects["out", "ex/_FAILED.json"])["message"])
+        review = json.loads(self.mod.s3.objects["out", "ex/summary.json"])["review"]
+        self.assertEqual(review, {"needed": True, "reasons": ["1 sheet(s) failed: a"]})
+
+    def test_review_reasons(self):
+        from pidtwin.graph.schema import Graph, Node
+        from pidtwin.graph.validate import Issue
+        ok = {"status": "SUCCEEDED", "sheet_id": "a", "review": {"finished": True}}
+        self.assertEqual(self.mod.review([ok]), {"needed": False, "reasons": []})
+        routine = [Issue(level="warning", code="valve_degree", node="v1", message="")]
+        self.assertFalse(self.mod.review([ok], issues=routine)["needed"])  # routine warnings alone: no review
+        issues = routine + [Issue(level="warning", code="dangling_pipe", node=f"p{i}", message="") for i in range(2)]
+        plant = Graph(source="pid", sheets=[{"id": "a"}, {"id": "b"}],
+                      nodes=[Node(id="a/X", category="offpage", attrs={"stitched_to": "b/X"}),
+                             Node(id="b/Y", category="offpage")])
+        out = self.mod.review([ok, {**ok, "sheet_id": "b", "review": {"finished": False}}], plant, issues)
+        self.assertEqual(out["reasons"], ["review stopped early on b", "2 dangling pipes",
+                                          "1 off-page connector(s) not joined across sheets"])
 
 
 class DispatchSheet(unittest.TestCase):
@@ -212,6 +230,108 @@ class SdmaStart(unittest.TestCase):
                 self.mod.lambda_handler({**ok, **bad}, None)
             self.assertIn(msg, str(e.exception))
         self.assertEqual(self.calls, [])
+
+
+def load_sdma(name, env):
+    """The SDMA stage handler (sdma.py) next to a Lambda's index.py, which it imports."""
+    sys.path.insert(0, str(LAMBDA / name))
+    try:
+        with mock.patch.dict(os.environ, {"AWS_DEFAULT_REGION": "us-east-1", **env}):
+            sys.modules.pop("index", None)
+            index = importlib.import_module("index")
+            spec = importlib.util.spec_from_file_location(f"sdma_{name}", LAMBDA / name / "sdma.py")
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+    finally:
+        sys.path.remove(str(LAMBDA / name))
+        sys.modules.pop("index", None)
+    return mod, index
+
+
+class SdmaStages(unittest.TestCase):
+    def test_render_pages_names_each_page_for_stage_2(self):
+        mod, index = load_sdma("prepare_input", {"INPUT_BUCKET": "out", "OUTPUT_BUCKET": "out", "SOURCE_BUCKETS": '["sdma"]',
+                                                 "DEFAULT_CONFIG": json.dumps(DEFAULTS),
+                                                 "ALLOWED_MODEL_IDS": json.dumps(ALLOWED)})
+        index.s3 = FakeS3()
+        index.s3.objects["sdma", "p/Data/ab.xxh128"] = png_bytes()
+        out = mod.lambda_handler({"runId": "inv-1", "assetId": "asset-1", "s3Uri": "s3://sdma/p/Data/ab.xxh128",
+                                  "path": "dir/Area 1.png", "modelId": ALLOWED[1], "detect": "", "reviewModelId": ""},
+                                 None)
+        self.assertEqual(out, {"runId": "inv-1", "pages": 1, "pagesPrefix": "s3://out/inv-1/sdma/pages/"})
+        page = index.s3.objects["out", "inv-1/sdma/pages/Area_1.page.png"]
+        # stage 2 finds the run by the page's xxh128, the hash SDMA gives the ingested page
+        entry = json.loads(index.s3.objects["out", f"sdma-pages/asset-1/{mod.xxhash.xxh128(page).hexdigest()}.json"])
+        self.assertEqual(entry, {"runId": "inv-1"})
+        manifest = json.loads(index.s3.objects["out", "inv-1/input.json"])
+        self.assertEqual(manifest["config"]["modelId"], ALLOWED[1])
+        with self.assertRaises(index.InputError):
+            mod.lambda_handler({"runId": "bad id", "assetId": "asset-1", "s3Uri": "s3://sdma/x", "path": "a.png"}, None)
+
+    def test_digitize_sheet_starts_the_agent_in_export_mode(self):
+        mod, index = load_sdma("dispatch_sheet", {"AGENT_RUNTIME_ARN": "arn:aws:bedrock-agentcore:us-east-1:1:runtime/x",
+                                                  "OUTPUT_BUCKET": "out"})
+        mod.s3 = FakeS3()
+        mod.s3.objects["out", f"sdma-pages/asset-1/{'a' * 32}.json"] = b'{"runId": "inv-1"}'
+        mod.s3.objects["out", "inv-1/input.json"] = json.dumps({"config": DEFAULTS, "pages": [
+            {"sheetId": "Area_1", "pageKey": "inv-1/pages/Area_1.png", "outputPrefix": "inv-1/sheets/Area_1/"}]}).encode()
+        calls = []
+
+        class Agent:
+            def invoke_agent_runtime(self, **kw):
+                calls.append(kw)
+                return {"response": io.BytesIO(b'{"status": "accepted"}')}
+        index.agentcore = Agent()
+        ok = {"invocationId": "inv-2", "assetId": "asset-1", "hash": "a" * 32, "path": "x/Area_1.page.png"}
+        out = mod.lambda_handler(ok, None)
+        self.assertEqual(out["exportPrefix"], "s3://out/sdma-sheets/inv-2/")
+        payload = json.loads(calls[0]["payload"])
+        self.assertEqual((payload["pageKey"], payload["outputPrefix"], payload["export"]),
+                         ("inv-1/pages/Area_1.png", "inv-1/sheets/Area_1/", {"prefix": "sdma-sheets/inv-2/", "name": "Area_1"}))
+        for bad, msg in [({"hash": "b" * 32}, "not a page rendered by stage 1"), ({"hash": "xyz"}, "xxh128"),
+                         ({"assetId": ""}, "assetId"), ({"path": "x/overlay.png"}, "rendered page"),
+                         ({"path": "x/B.page.png"}, "no sheet")]:
+            with self.assertRaises(ValueError) as e:
+                mod.lambda_handler({**ok, **bad}, None)
+            self.assertIn(msg, str(e.exception))
+
+    def test_merge_plant_waits_for_every_sheet_then_merges(self):
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+        from pidtwin.graph.build import build_graph
+        mod, index = load_sdma("merge_sheets", {"OUTPUT_BUCKET": "out", "CONTENT_BUCKET": "sdma"})
+        index.s3 = s3 = FakeS3()
+        pages = [{"sheetId": s, "pageKey": f"r1/pages/{s}.png", "outputPrefix": f"r1/sheets/{s}/"} for s in ("a", "b")]
+        s3.objects["out", "r1/input.json"] = json.dumps({"source": {"fileName": "Area 7.pdf"},
+                                                         "config": {"modelId": ALLOWED[0]}, "pages": pages}).encode()
+        result_a = {"status": "SUCCEEDED", "sheet_id": "a", "outputPrefix": "r1/sheets/a/", "usage": {}, "usd": 0.2}
+        s3.objects["out", "r1/sheets/a/graph.json"] = build_graph(SHEET, sheet="a").model_dump_json().encode()
+        s3.objects["out", "r1/sheets/a/result.json"] = json.dumps(result_a).encode()
+        s3.objects["sdma", "p/Data/h1.xxh128"] = json.dumps(result_a).encode()
+        event = {"s3Uri": "s3://sdma/p/Data/h1.xxh128"}
+
+        out = mod.lambda_handler(event, None)  # sheet b not done yet
+        self.assertEqual((out["status"], out["sheetsDone"], out["sheets"]), ("PENDING", 1, 2))
+        self.assertEqual((out["reviewNeeded"], out["reviewReasons"]), (False, ""))
+        self.assertEqual(out["plantPrefix"], "s3://out/r1/")
+        self.assertNotIn(("out", "r1/plant.graph.json"), s3.objects)
+        self.assertNotIn(("out", "r1/review/Area_7.review.json"), s3.objects)
+
+        s3.objects["out", "r1/sheets/b/result.json"] = json.dumps(
+            {"status": "FAILED", "sheet_id": "b", "outputPrefix": "r1/sheets/b/", "error": "TimeoutError"}).encode()
+        out = mod.lambda_handler(event, None)  # the last sheet's run merges
+        self.assertEqual((out["status"], out["sheetsDone"]), ("PARTIAL", 2))
+        self.assertTrue(out["reviewNeeded"])
+        self.assertIn("1 sheet(s) failed: b", out["reviewReasons"])
+        self.assertEqual(out["reviewPrefix"], "s3://out/r1/review/")
+        # the alert connector starts when this file is attached
+        review_file = json.loads(s3.objects["out", "r1/review/Area_7.review.json"])
+        self.assertEqual(review_file["status"], "PARTIAL")
+        self.assertIn("1 sheet(s) failed: b", review_file["reasons"])
+        self.assertGreater(out["nodes"], 0)
+        for name in ("plant.graph.json", "plant.dexpi.xml", "plant.issues.json", "summary.json"):
+            self.assertIn(("out", f"r1/{name}"), s3.objects)
+        with self.assertRaises(ValueError):
+            mod.lambda_handler({"s3Uri": "s3://other/x"}, None)
 
 
 if __name__ == "__main__":
