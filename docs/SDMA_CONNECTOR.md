@@ -37,6 +37,34 @@ SDMA asset: upload area-7.pdf
   takes optional `modelId`, `detect` (`tiled` or `single`) and `reviewModelId` parameters. Leave
   them empty for the deployment defaults. Models must be in `digitization.allowedModelIds`.
 
+### Networking
+
+By default this Guidance runs in its own VPC, separate from SDMA's. The two need no network path
+between them, because every call goes through an AWS API:
+
+- SDMA's connector Lambda assumes the connector role and invokes `SdmaStart` through its STS and
+  Lambda endpoints, and reads the results through its S3 endpoint.
+- The Guidance reads drawings from SDMA's content bucket through its own S3 gateway endpoint.
+
+IAM roles and bucket permissions control access; neither VPC needs a route to the other.
+
+You can deploy into SDMA's VPC instead, with `vpc.vpcId`, `vpc.subnetIds` and `vpc.routeTableIds`
+(see [Configuration](CONFIGURATION.md#vpc-and-endpoints-networking)). That saves the cost of a
+second set of interface endpoints, but it changes SDMA's network:
+
+- SDMA's VPC has no endpoints for Bedrock Runtime, Bedrock AgentCore or Step Functions, so they
+  must be added to it. Either set `vpc.createVpcEndpoints` with only `endpoints.bedrockRuntime`,
+  `endpoints.agentCore` and `endpoints.stepFunctions` turned on, or add them yourself. SDMA's VPC
+  already has CloudWatch Logs and S3 endpoints, and a second Logs endpoint with private DNS would
+  conflict with it.
+- SDMA's S3 gateway endpoint allows only principals of your account. AgentCore Runtime fetches the
+  agent's code from service-owned `acr-code-*` buckets as the AgentCore service, so that endpoint's
+  policy needs the same extra statement as this Guidance's own S3 endpoint
+  (`cdk/lib/constructs/networking.ts`). Otherwise the agent cannot start.
+- The subnets must be in Availability Zones where AgentCore Runtime supports VPC connectivity.
+
+Keeping a separate VPC is simpler: the Guidance then deploys and deletes without touching SDMA.
+
 ## Prerequisites
 
 - SDMA deployed in the same account and Region as this Guidance.
