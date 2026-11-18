@@ -25,9 +25,17 @@ from botocore.config import Config
 
 from pidtwin import solution
 
-TOKEN = f"AWSSOLUTION/{solution.SOLUTION_ID}/{solution.SOLUTION_VERSION}"
+# one token per id, primary first; every one must reach the wire
+TOKENS = [f"AWSSOLUTION/{sid}/{solution.SOLUTION_VERSION}" for sid in [solution.SOLUTION_ID, *solution.SECONDARY_IDS]]
+TOKEN = " ".join(TOKENS)
 REPO = solution.CONFIG_PATH.parent
 CDK = REPO / "cdk"
+
+
+def token_counts(user_agent):
+    """How often each solution token appears as a whole space-delimited field."""
+    fields = user_agent.split()
+    return [fields.count(t) for t in TOKENS]
 
 
 def idents(suffix=""):
@@ -74,9 +82,10 @@ class UserAgentTest(unittest.TestCase):
         ua = sent_user_agent(sts())
         # whole-token match: the metrics pipeline splits on whitespace, so the token with anything appended to
         # it (TOKEN + 'extra') would not count
-        self.assertEqual(ua.split().count(TOKEN), 1, ua)
+        self.assertEqual(token_counts(ua), [1] * len(TOKENS), ua)
         # botocore's appid path would have rewritten the slashes
-        self.assertNotIn(TOKEN.replace("/", "-"), ua)
+        for t in TOKENS:
+            self.assertNotIn(t.replace("/", "-"), ua)
 
     def test_existing_config_survives_the_merge(self):
         """A caller's timeouts/retries/pool size must not be dropped for the suffix."""
@@ -95,28 +104,28 @@ class UserAgentTest(unittest.TestCase):
         # client; the value survived the merge
         self.assertEqual(cfg.retries["total_max_attempts"], 8, cfg.retries)
         self.assertEqual(cfg.max_pool_connections, 25)
-        self.assertEqual(sent_user_agent(client).split().count(TOKEN), 1)
+        self.assertEqual(token_counts(sent_user_agent(client)), [1] * len(TOKENS))
 
     def test_foreign_user_agent_extra_is_concatenated_not_clobbered(self):
         fields = sent_user_agent(sts(user_agent_extra="SomeOtherComponent/1.2.3")).split()
         self.assertIn("SomeOtherComponent/1.2.3", fields)
-        self.assertEqual(fields.count(TOKEN), 1, fields)
+        self.assertEqual(token_counts(" ".join(fields)), [1] * len(TOKENS), fields)
 
     def test_applying_the_config_twice_does_not_duplicate_the_token(self):
         """get_client may be handed a config that already went through here (pipeline.BOTO_CONFIG does)."""
         twice = solution.solution_config(solution.solution_config())
-        self.assertEqual(twice.user_agent_extra.split().count(TOKEN), 1, twice.user_agent_extra)
+        self.assertEqual(token_counts(twice.user_agent_extra), [1] * len(TOKENS), twice.user_agent_extra)
 
     def test_config_may_be_passed_positionally(self):
         """Config is the second positional argument for both helpers (not boto3.client's layout, whose second
         positional is region_name). Locked down because call sites are often copied in."""
         client = solution.get_client("sts", Config(read_timeout=11), session=signed_session())
         self.assertEqual(client.meta.config.read_timeout, 11)
-        self.assertEqual(sent_user_agent(client).split().count(TOKEN), 1)
+        self.assertEqual(token_counts(sent_user_agent(client)), [1] * len(TOKENS))
         resource = solution.get_resource("s3", Config(read_timeout=11), session=signed_session())
         cfg = resource.meta.client.meta.config
         self.assertEqual(cfg.read_timeout, 11)
-        self.assertEqual(cfg.user_agent_extra.split().count(TOKEN), 1, cfg.user_agent_extra)
+        self.assertEqual(token_counts(cfg.user_agent_extra), [1] * len(TOKENS), cfg.user_agent_extra)
 
     def test_a_positional_region_string_fails_at_the_boundary(self):
         """boto3.client('sts', 'us-west-2') copied over must raise an actionable TypeError at the call
@@ -128,29 +137,30 @@ class UserAgentTest(unittest.TestCase):
         """Deployed code (agent, Lambdas) reads the token the CDK app injected."""
         # deliberately not this solution's real version: proves the env value is used rather than
         # coincidentally matching the config
-        override = f"AWSSOLUTION/{solution.SOLUTION_ID}/v9.9.9"
+        override = " ".join(t.replace(solution.SOLUTION_VERSION, "v9.9.9") for t in TOKENS)
         with mock.patch.dict(os.environ, {"USER_AGENT_STRING": override}):
             self.assertEqual(solution.user_agent_string(), override)
-            self.assertEqual(sent_user_agent(sts()).split().count(override), 1)
+            fields = sent_user_agent(sts()).split()
+            self.assertEqual([fields.count(t) for t in override.split()], [1] * len(TOKENS), fields)
         self.assertEqual(solution.user_agent_string(), TOKEN)
 
     def test_bedrock_runtime_and_the_review_agent_carry_the_token(self):
         """pipeline.BOTO_CONFIG feeds both the Bedrock client and the Strands BedrockModel (review.py)."""
         os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
         from pidtwin.digitize import pipeline
-        self.assertEqual(pipeline.BOTO_CONFIG.user_agent_extra.split().count(TOKEN), 1)
+        self.assertEqual(token_counts(pipeline.BOTO_CONFIG.user_agent_extra), [1] * len(TOKENS))
         self.assertEqual(pipeline.BOTO_CONFIG.read_timeout, 900)
         from strands.models.bedrock import BedrockModel
         model = BedrockModel(model_id="us.anthropic.claude-sonnet-5-5", boto_client_config=pipeline.BOTO_CONFIG,
                              boto_session=signed_session())
         fields = sent_user_agent(model.client, "converse", modelId="m",
                                  messages=[{"role": "user", "content": [{"text": "x"}]}]).split()
-        self.assertEqual(fields.count(TOKEN), 1, fields)
+        self.assertEqual(token_counts(" ".join(fields)), [1] * len(TOKENS), fields)
         self.assertIn("strands-agents", fields)
 
     def test_dispatch_sheet_lambda_inlines_the_token_from_the_environment(self):
         """DispatchSheet is bundled without pidtwin, so it reads USER_AGENT_STRING itself."""
-        override = f"AWSSOLUTION/{solution.SOLUTION_ID}/v9.9.9"
+        override = " ".join(t.replace(solution.SOLUTION_VERSION, "v9.9.9") for t in TOKENS)
         env = {"AWS_DEFAULT_REGION": "us-east-1", "AGENT_RUNTIME_ARN": "arn", "USER_AGENT_STRING": override,
                "AWS_ACCESS_KEY_ID": "AKIAIOSFODNN7EXAMPLE", "AWS_SECRET_ACCESS_KEY": "test-secret-not-a-real-key"}
         with mock.patch.dict(os.environ, env):
@@ -161,7 +171,8 @@ class UserAgentTest(unittest.TestCase):
             ua = sent_user_agent(mod.agentcore, "invoke_agent_runtime",
                                  agentRuntimeArn="arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/x",
                                  runtimeSessionId="s" * 40, payload=b"{}")
-        self.assertEqual(ua.split().count(override), 1, ua)
+        fields = ua.split()
+        self.assertEqual([fields.count(t) for t in override.split()], [1] * len(TOKENS), ua)
 
 
 class StackDescriptionTest(unittest.TestCase):
@@ -194,12 +205,23 @@ class StackDescriptionTest(unittest.TestCase):
             with self.assertRaises(ValueError, msg=bad):
                 solution.stack_description("x", id_suffix=bad)
 
-    def test_secondary_ids_are_in_the_description_but_not_the_user_agent(self):
+    def test_secondary_ids_are_in_the_description_and_the_user_agent(self):
         self.assertTrue(solution.SECONDARY_IDS, "solution.json lists no secondary_ids")
         desc = solution.stack_description()
+        with mock.patch.dict(os.environ, {"USER_AGENT_STRING": ""}):
+            tokens = solution.user_agent_string().split()
+        self.assertEqual(tokens[0], f"AWSSOLUTION/{solution.SOLUTION_ID}/{solution.SOLUTION_VERSION}")
         for sid in solution.SECONDARY_IDS:
             self.assertIn(f"({sid})", desc)
-            self.assertNotIn(sid, solution.user_agent_string())
+            self.assertIn(f"AWSSOLUTION/{sid}/{solution.SOLUTION_VERSION}", tokens)
+
+    def test_malformed_secondary_ids_degrade_the_user_agent_to_the_primary(self):
+        """Attribution must never break a run; stack_description() is what blocks the bad list."""
+        primary = f"AWSSOLUTION/{solution.SOLUTION_ID}/{solution.SOLUTION_VERSION}"
+        with mock.patch.dict(os.environ, {"USER_AGENT_STRING": ""}):
+            for bad in ("SO0378", [0], [None, ""], [solution.SOLUTION_ID]):
+                with mock.patch.object(solution, "SECONDARY_IDS", bad):
+                    self.assertEqual(solution.user_agent_string(), primary, bad)
 
     def test_malformed_secondary_ids_block_a_deploy(self):
         for bad in ("SO0378", ["S0378"], [0], [solution.SOLUTION_ID]):

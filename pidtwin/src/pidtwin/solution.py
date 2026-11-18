@@ -11,22 +11,23 @@ release means editing one file and nothing else:
          (<id>) (<secondary id>) - <solution name>. Version <version>
 
      with one parenthesised id per entry in ``secondary_ids`` (optional). The
-     secondary ids are reported here only, not in the user agent. The CDK app is TypeScript, so it builds the description with
+     CDK app is TypeScript, so it builds the description with
      ``cdk/lib/solution.ts``, a port of ``stack_description()`` below;
      ``tests/test_solution.py`` checks that the two agree.
 
   2. **API usage attribution** keys off a suffix appended to the ``User-Agent``
-     header of every AWS SDK call:
+     header of every AWS SDK call, one space-separated token per id, primary
+     first:
 
-         AWSSOLUTION/<id>/<version>
+         AWSSOLUTION/<id>/<version> AWSSOLUTION/<secondary id>/<version>
 
      ``get_client()`` / ``get_resource()`` attach it, and every boto3 call site
      in pidtwin, the agent (``cdk/agent/main.py``) and the PrepareInput and
      MergeSheets Lambdas goes through them. Deployed, those run where
      ``solution.json`` is not bundled, so the CDK app injects the token as the
      ``USER_AGENT_STRING`` environment variable, which wins here. The
-     DispatchSheet Lambda is bundled without pidtwin and inlines the token
-     from ``USER_AGENT_STRING`` directly.
+     DispatchSheet and SdmaStart Lambdas are bundled without pidtwin and
+     inline the tokens from ``USER_AGENT_STRING`` directly.
 
 Neither resource tags nor any other mechanism feeds these two pipelines, so
 there is deliberately nothing else here.
@@ -90,12 +91,17 @@ def identity() -> dict:
 SOLUTION_ID = identity().get("id", "")
 SOLUTION_NAME = identity().get("name", "")
 SOLUTION_VERSION = identity().get("version", "")
-# reported in stack descriptions only, not in the user agent
+# reported alongside the primary id in stack descriptions and the user agent
 SECONDARY_IDS = identity().get("secondary_ids", [])
 
 
 def user_agent_string() -> str:
-    """The ``AWSSOLUTION/<id>/<version>`` token, or "" if it cannot be built.
+    """The ``AWSSOLUTION/<id>/<version>`` tokens, space-separated, or "".
+
+    One token for the primary id, then one per ``secondary_ids`` entry that is
+    a string (anything else is dropped here rather than raised: attribution
+    must never break a run, and ``stack_description()`` already refuses to
+    deploy a malformed list).
 
     ``USER_AGENT_STRING`` in the environment wins, so code running somewhere
     the repo is not checked out (the agent runtime and the Lambdas, where the
@@ -106,9 +112,12 @@ def user_agent_string() -> str:
     from_env = os.environ.get("USER_AGENT_STRING")
     if from_env:
         return from_env
-    if SOLUTION_ID and SOLUTION_VERSION:
-        return f"AWSSOLUTION/{SOLUTION_ID}/{SOLUTION_VERSION}"
-    return ""
+    if not (SOLUTION_ID and SOLUTION_VERSION):
+        return ""
+    secondary = SECONDARY_IDS if isinstance(SECONDARY_IDS, list) else []
+    ids = [SOLUTION_ID, *(s for s in secondary if isinstance(s, str) and s)]
+    return " ".join(f"AWSSOLUTION/{sid}/{SOLUTION_VERSION}"
+                    for sid in dict.fromkeys(ids))
 
 
 def solution_config(config=None):
@@ -133,13 +142,13 @@ def solution_config(config=None):
             f"Note boto3.client's second positional argument is region_name — "
             f"pass region_name= (and everything except a Config) by keyword.")
 
-    token = user_agent_string()
     # Idempotent: get_client() may be handed a config that already went through
-    # here, and the suffix must appear exactly once — the metrics pipeline
+    # here, and each token must appear exactly once — the metrics pipeline
     # matches whole space-delimited tokens.
     parts = (getattr(config, "user_agent_extra", None) or "").split()
-    if token and token not in parts:
-        parts.append(token)
+    for token in user_agent_string().split():
+        if token not in parts:
+            parts.append(token)
     # Nothing to say (no id/version anywhere) → set nothing at all, rather than
     # merging an empty override over whatever the caller had.
     ours = Config(user_agent_extra=" ".join(parts)) if parts else Config()
