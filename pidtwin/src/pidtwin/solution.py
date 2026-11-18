@@ -11,14 +11,16 @@ release means editing one file and nothing else:
          (<id>) (<secondary id>) - <solution name>. Version <version>
 
      with one parenthesised id per entry in ``secondary_ids`` (optional). The
-     secondary ids are reported here only, not in the user agent. The CDK app is TypeScript, so it builds the description with
+     CDK app is TypeScript, so it builds the description with
      ``cdk/lib/solution.ts``, a port of ``stack_description()`` below;
      ``tests/test_solution.py`` checks that the two agree.
 
   2. **API usage attribution** keys off a suffix appended to the ``User-Agent``
      header of every AWS SDK call:
 
-         AWSSOLUTION/<id>/<version>
+         AWSSOLUTION/<secondary id>/<version>
+
+     using the first entry in ``secondary_ids``, not the primary id.
 
      ``get_client()`` / ``get_resource()`` attach it, and every boto3 call site
      in pidtwin, the agent (``cdk/agent/main.py``) and the PrepareInput and
@@ -90,12 +92,12 @@ def identity() -> dict:
 SOLUTION_ID = identity().get("id", "")
 SOLUTION_NAME = identity().get("name", "")
 SOLUTION_VERSION = identity().get("version", "")
-# reported in stack descriptions only, not in the user agent
+# all reported in stack descriptions; the first is the id in the user agent
 SECONDARY_IDS = identity().get("secondary_ids", [])
 
 
 def user_agent_string() -> str:
-    """The ``AWSSOLUTION/<id>/<version>`` token, or "" if it cannot be built.
+    """The ``AWSSOLUTION/<secondary id>/<version>`` token, or "" if it cannot be built.
 
     ``USER_AGENT_STRING`` in the environment wins, so code running somewhere
     the repo is not checked out (the agent runtime and the Lambdas, where the
@@ -106,8 +108,9 @@ def user_agent_string() -> str:
     from_env = os.environ.get("USER_AGENT_STRING")
     if from_env:
         return from_env
-    if SOLUTION_ID and SOLUTION_VERSION:
-        return f"AWSSOLUTION/{SOLUTION_ID}/{SOLUTION_VERSION}"
+    sid = SECONDARY_IDS[0] if isinstance(SECONDARY_IDS, list) and SECONDARY_IDS else ""
+    if sid and SOLUTION_VERSION:
+        return f"AWSSOLUTION/{sid}/{SOLUTION_VERSION}"
     return ""
 
 

@@ -3,7 +3,7 @@ import * as path from 'path';
 
 /**
  * AWS Solution identity for the CDK app: the stack Description that deployment counting matches, and the
- * AWSSOLUTION/<id>/<version> user-agent token the agent and the Lambdas append to their AWS SDK calls.
+ * AWSSOLUTION/<secondary id>/<version> user-agent token the agent and the Lambdas append to their AWS SDK calls.
  *
  * A port of pidtwin/src/pidtwin/solution.py (see its docstring for why each guard exists); both read the
  * `solution` block of solution.json at the repository root, and pidtwin/tests/test_solution.py checks they
@@ -27,9 +27,10 @@ function identity(): Identity {
   }
 }
 
-/** The AWSSOLUTION/<id>/<version> token, or '' if it cannot be built. */
+/** The AWSSOLUTION/<secondary id>/<version> token, or '' if it cannot be built. */
 export function userAgentString(): string {
-  const { id, version } = identity();
+  const { secondary_ids: secondaryIds, version } = identity();
+  const id = Array.isArray(secondaryIds) ? secondaryIds[0] : undefined;
   return id && version ? `AWSSOLUTION/${id}/${version}` : '';
 }
 
@@ -45,7 +46,7 @@ export function userAgentEnvironment(): { [key: string]: string } {
 /**
  * `(<id>) (<secondary id>) - <name>. Version <version>`, or, for a supporting stack,
  * `(<id>-<idSuffix>) (<secondary id>-<idSuffix>) - <name> - <component>. Version <version>`. One parenthesised id
- * per entry in `secondary_ids`, which are reported here only, not in the user agent.
+ * per entry in `secondary_ids`; the first of them is also the id in the user agent.
  *
  * Only the stack at the top of the dependency graph (the application stack, which consumes the network
  * stack) carries the bare id; a supporting stack passes `idSuffix`, or one install counts as two.

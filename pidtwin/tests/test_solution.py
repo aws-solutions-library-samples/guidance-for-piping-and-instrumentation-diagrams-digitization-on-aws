@@ -25,7 +25,7 @@ from botocore.config import Config
 
 from pidtwin import solution
 
-TOKEN = f"AWSSOLUTION/{solution.SOLUTION_ID}/{solution.SOLUTION_VERSION}"
+TOKEN = f"AWSSOLUTION/{solution.SECONDARY_IDS[0]}/{solution.SOLUTION_VERSION}"
 REPO = solution.CONFIG_PATH.parent
 CDK = REPO / "cdk"
 
@@ -194,12 +194,14 @@ class StackDescriptionTest(unittest.TestCase):
             with self.assertRaises(ValueError, msg=bad):
                 solution.stack_description("x", id_suffix=bad)
 
-    def test_secondary_ids_are_in_the_description_but_not_the_user_agent(self):
+    def test_the_user_agent_carries_the_secondary_id_not_the_primary(self):
         self.assertTrue(solution.SECONDARY_IDS, "solution.json lists no secondary_ids")
         desc = solution.stack_description()
-        for sid in solution.SECONDARY_IDS:
+        for sid in [solution.SOLUTION_ID, *solution.SECONDARY_IDS]:
             self.assertIn(f"({sid})", desc)
-            self.assertNotIn(sid, solution.user_agent_string())
+        with mock.patch.dict(os.environ, {"USER_AGENT_STRING": ""}):
+            self.assertIn(solution.SECONDARY_IDS[0], solution.user_agent_string())
+            self.assertNotIn(solution.SOLUTION_ID, solution.user_agent_string())
 
     def test_malformed_secondary_ids_block_a_deploy(self):
         for bad in ("SO0378", ["S0378"], [0], [solution.SOLUTION_ID]):
