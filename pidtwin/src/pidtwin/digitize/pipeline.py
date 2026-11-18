@@ -94,7 +94,8 @@ CATEGORY_DOC = """Categories:
 - valve: any valve body (gate, globe, ball, butterfly, check, control, relief, solenoid, ...);
   type = the valve kind; tag = printed tag or null.
 - instrument: ISA bubbles, discs, shared-display squares; tag = letters + "-" + loop number on one
-  line (e.g. "FT-101"); put any extra text inside the symbol in "text".
+  line (e.g. "FT-101"). A tag printed on two lines is joined with "-", never run together
+  ("RO-10" over "202" is "RO-10-202", not "RO-10202"); put any extra text inside the symbol in "text".
 - fitting: inline or terminal piping items - end cap / blind flange (short double bar at a line
   end), spectacle blind, orifice or flange pair (double bar across a line, often with a size label),
   reducer, strainer, insulation or tracing segment, drain / vent / ground-style termination
