@@ -104,10 +104,13 @@ them from the authors' release.
 | Model | Label accuracy (F1) | Valve tags P / R | Instruments P / R | Line numbers P / R | Connections P / R | Connections F1 | Cost per sheet | Time per sheet |
 |---|---|---|---|---|---|---|---|---|
 | GPT-6.1 Sol | **99%** | 99% / 99% | 97% / 96% | 99% / 99% | 90% / 88% | **89%** | $1.24 | 5.8 min |
-| GPT-6.1 Terra | **99%** | 100% / 99% | 100% / 95% | 100% / 100% | 86% / 88% | 87% | **$0.55** | **3.0 min** |
+| GPT-6.1 Terra | **99%** | 100% / 99% | 100% / 95% | 100% / 100% | 86% / 88% | 87% | $0.55 | 3.0 min |
 | GPT-6 Astra | **99%** | 100% / 99% | 99% / 93% | 100% / 100% | 93% / 89% | **91%** | $6.79 | 5.3 min |
+| GPT-6.2 Sol | **99%** | 100% / 100% | 99% / 98% | 94% / 100% | 90% / 88% | **89%** | **$0.32** | **0.8 min** |
+| GPT-6.2 Astra | **100%** | 100% / 100% | 100% / 100% | 100% / 100% | 93% / 90% | **92%** | $1.23 | 3.0 min |
 | Claude Sonnet 5.5 | **99%** | 100% / 99% | 95% / 97% | 97% / 100% | 84% / 79% | 81% | $1.39 | 5.3 min |
 | Claude Opus 5.5 | 96% | 100% / 98% | 85% / 86% | 100% / 100% | 88% / 85% | 87% | $3.31 | 5.4 min |
+| Claude Fable 5.2 | **100%** | 100% / 100% | 100% / 100% | 100% / 100% | 93% / 89% | **91%** | $7.43 | 8.3 min |
 
 - **P (precision)** is the share of reported items that are correct. **R (recall)** is the share of
   items on the sheet that were found. Counts are pooled over all 10 sheets before P, R and F1 are
@@ -119,10 +122,16 @@ them from the authors' release.
   connection key. The keys were generated from the dataset's ground truth; on sheet 1 the generated
   key was checked against a hand-made one.
 - **Cost** uses on-demand list prices, with no discounts.
+- GPT-6.2 Sol, GPT-6.2 Astra and Claude Fable 5.2 were measured later (November 2026). They are
+  not in the deployment's default `allowedModelIds`; add them there to use them (see
+  [Configuration](docs/CONFIGURATION.md)). Claude Fable 5.2 also needs the account's Bedrock data
+  retention mode set to `aws_review` in the Region that calls it (see
+  [Data retention](https://docs.aws.amazon.com/bedrock/latest/userguide/data-retention.html)).
 
 Every model labels almost everything correctly. The models differ mainly in how well they trace
-connections, and in cost. Astra traces best at about 5× the cost of Sol. Terra costs less than
-half as much as Sol for slightly weaker tracing.
+connections, and in cost. GPT-6.2 Astra labels every item correctly and traces best, for about
+the cost of GPT-6.1 Sol. GPT-6.2 Sol matches GPT-6.1 Sol for about a quarter of the cost, and is
+the fastest. Claude Fable 5.2 is as accurate as GPT-6.2 Astra at about 6× its cost.
 
 Results on your drawings will differ. Before you choose a model, score a few of your own sheets
 with the local scorer (see [Run locally](#run-locally)).
