@@ -144,7 +144,6 @@ against the same keys:
 | Pipeline | Label accuracy (F1) | Valve tags P / R | Instruments P / R | Line numbers P / R | Connections P / R | Connections F1 |
 |---|---|---|---|---|---|---|
 | Version 2, default (Claude Opus 5.5 single call, GPT-6.1 Sol review) | **99%** | 99% / 98% | 99% / 99% | 100% / 100% | 92% / 90% | **91%** |
-| Version 2, GPT-6.1 Sol tiled | **99%** | 99% / 99% | 97% / 96% | 99% / 99% | 90% / 88% | 89% |
 | Version 1 | 74% | 98% / 72% | 0% / 0% | 100% / 92% | 11% / 35% | 17% |
 
 - Version 1 ran with its default settings, except that the notes boundary was given as
