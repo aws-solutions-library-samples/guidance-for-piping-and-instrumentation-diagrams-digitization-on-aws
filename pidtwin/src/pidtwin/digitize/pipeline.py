@@ -60,7 +60,7 @@ PRICES = {
     "us.anthropic.claude-sonnet-5-5": (2.20, 11.00, 2.75, 0.11),
     "global.anthropic.claude-fable-5-2": (8.00, 40.00, 10.00, 0.20),  # Bedrock price list, Global CRIS, 2026-11-18 (5-minute cache write)
     "global.openai.gpt-6.2-astra": (8.00, 40.00, 10.00, 0.40),  # Bedrock price list, Global CRIS, 2026-11-18
-    # GPT-6.2 Sol: no published price on 2026-11-18, so no entry (cost() reports unknown)
+    "us.openai.gpt-6.2-sol": (2.20, 11.00, 2.75, 0.11),  # Bedrock price list, Geo CRIS, <=272K-token requests, 2026-11-18
 }
 DEFAULT_MODEL = "opus"  # with --detect single and --review-model sol: the deployed default (README)
 USAGE_KEYS = ("inputTokens", "outputTokens", "cacheWriteInputTokens", "cacheReadInputTokens")
