@@ -3,7 +3,7 @@ import * as path from 'path';
 
 /**
  * AWS Solution identity for the CDK app: the stack Description that deployment counting matches, and the
- * AWSSOLUTION/<id>/<version> user-agent tokens (one per id) the agent and the Lambdas append to their AWS SDK calls.
+ * AWSSOLUTION/<secondary id>/<version> user-agent tokens the agent and the Lambdas append to their AWS SDK calls.
  *
  * A port of pidtwin/src/pidtwin/solution.py (see its docstring for why each guard exists); both read the
  * `solution` block of solution.json at the repository root, and pidtwin/tests/test_solution.py checks they
@@ -28,8 +28,9 @@ function identity(): Identity {
 }
 
 /**
- * The AWSSOLUTION/<id>/<version> tokens, primary id first then each string in `secondary_ids`, space-separated;
- * '' if they cannot be built. A malformed `secondary_ids` is dropped here, not thrown: stackDescription() blocks it.
+ * The AWSSOLUTION/<id>/<version> tokens for the `secondary_ids`, space-separated, in place of the primary id; the
+ * primary id when there are none, and '' if nothing can be built. A malformed `secondary_ids` falls back to the
+ * primary here rather than throwing: stackDescription() blocks it.
  */
 export function userAgentString(): string {
   const { id, secondary_ids: secondaryIds, version } = identity();
@@ -37,7 +38,8 @@ export function userAgentString(): string {
     return '';
   }
   const secondary = Array.isArray(secondaryIds) ? secondaryIds : [];
-  const ids = [id, ...secondary.filter((s): s is string => typeof s === 'string' && s !== '')];
+  const named = secondary.filter((s): s is string => typeof s === 'string' && s !== '');
+  const ids = named.length ? named : [id];
   return [...new Set(ids)].map((sid) => `AWSSOLUTION/${sid}/${version}`).join(' ');
 }
 

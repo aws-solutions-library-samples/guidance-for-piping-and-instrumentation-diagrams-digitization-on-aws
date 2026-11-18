@@ -25,8 +25,9 @@ from botocore.config import Config
 
 from pidtwin import solution
 
-# one token per id, primary first; every one must reach the wire
-TOKENS = [f"AWSSOLUTION/{sid}/{solution.SOLUTION_VERSION}" for sid in [solution.SOLUTION_ID, *solution.SECONDARY_IDS]]
+# one token per secondary id, which replace the primary in the user agent; every one must reach the wire
+TOKENS = [f"AWSSOLUTION/{sid}/{solution.SOLUTION_VERSION}" for sid in solution.SECONDARY_IDS]
+PRIMARY = f"AWSSOLUTION/{solution.SOLUTION_ID}/{solution.SOLUTION_VERSION}"
 TOKEN = " ".join(TOKENS)
 REPO = solution.CONFIG_PATH.parent
 CDK = REPO / "cdk"
@@ -205,23 +206,24 @@ class StackDescriptionTest(unittest.TestCase):
             with self.assertRaises(ValueError, msg=bad):
                 solution.stack_description("x", id_suffix=bad)
 
-    def test_secondary_ids_are_in_the_description_and_the_user_agent(self):
+    def test_the_user_agent_carries_the_secondary_ids_instead_of_the_primary(self):
         self.assertTrue(solution.SECONDARY_IDS, "solution.json lists no secondary_ids")
         desc = solution.stack_description()
+        self.assertIn(f"({solution.SOLUTION_ID})", desc)
         with mock.patch.dict(os.environ, {"USER_AGENT_STRING": ""}):
             tokens = solution.user_agent_string().split()
-        self.assertEqual(tokens[0], f"AWSSOLUTION/{solution.SOLUTION_ID}/{solution.SOLUTION_VERSION}")
+            self.assertNotIn(PRIMARY, tokens)
+            self.assertNotIn(PRIMARY, sent_user_agent(sts()).split())
         for sid in solution.SECONDARY_IDS:
             self.assertIn(f"({sid})", desc)
             self.assertIn(f"AWSSOLUTION/{sid}/{solution.SOLUTION_VERSION}", tokens)
 
-    def test_malformed_secondary_ids_degrade_the_user_agent_to_the_primary(self):
+    def test_missing_or_malformed_secondary_ids_fall_back_to_the_primary(self):
         """Attribution must never break a run; stack_description() is what blocks the bad list."""
-        primary = f"AWSSOLUTION/{solution.SOLUTION_ID}/{solution.SOLUTION_VERSION}"
         with mock.patch.dict(os.environ, {"USER_AGENT_STRING": ""}):
-            for bad in ("SO0378", [0], [None, ""], [solution.SOLUTION_ID]):
+            for bad in ("SO0378", [], [0], [None, ""]):
                 with mock.patch.object(solution, "SECONDARY_IDS", bad):
-                    self.assertEqual(solution.user_agent_string(), primary, bad)
+                    self.assertEqual(solution.user_agent_string(), PRIMARY, bad)
 
     def test_malformed_secondary_ids_block_a_deploy(self):
         for bad in ("SO0378", ["S0378"], [0], [solution.SOLUTION_ID]):

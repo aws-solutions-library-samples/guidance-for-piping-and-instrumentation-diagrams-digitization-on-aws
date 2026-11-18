@@ -16,10 +16,11 @@ release means editing one file and nothing else:
      ``tests/test_solution.py`` checks that the two agree.
 
   2. **API usage attribution** keys off a suffix appended to the ``User-Agent``
-     header of every AWS SDK call, one space-separated token per id, primary
-     first:
+     header of every AWS SDK call, one space-separated token per secondary
+     id; the primary id is not in it (it falls back to the primary only when
+     ``secondary_ids`` is empty or malformed):
 
-         AWSSOLUTION/<id>/<version> AWSSOLUTION/<secondary id>/<version>
+         AWSSOLUTION/<secondary id>/<version>
 
      ``get_client()`` / ``get_resource()`` attach it, and every boto3 call site
      in pidtwin, the agent (``cdk/agent/main.py``) and the PrepareInput and
@@ -91,17 +92,17 @@ def identity() -> dict:
 SOLUTION_ID = identity().get("id", "")
 SOLUTION_NAME = identity().get("name", "")
 SOLUTION_VERSION = identity().get("version", "")
-# reported alongside the primary id in stack descriptions and the user agent
+# reported alongside the primary id in stack descriptions, and instead of it in the user agent
 SECONDARY_IDS = identity().get("secondary_ids", [])
 
 
 def user_agent_string() -> str:
     """The ``AWSSOLUTION/<id>/<version>`` tokens, space-separated, or "".
 
-    One token for the primary id, then one per ``secondary_ids`` entry that is
-    a string (anything else is dropped here rather than raised: attribution
-    must never break a run, and ``stack_description()`` already refuses to
-    deploy a malformed list).
+    One token per ``secondary_ids`` entry that is a string, in place of the
+    primary id; the primary id when there are none. A malformed list falls
+    back to the primary here rather than raising: attribution must never break
+    a run, and ``stack_description()`` already refuses to deploy it.
 
     ``USER_AGENT_STRING`` in the environment wins, so code running somewhere
     the repo is not checked out (the agent runtime and the Lambdas, where the
@@ -115,7 +116,7 @@ def user_agent_string() -> str:
     if not (SOLUTION_ID and SOLUTION_VERSION):
         return ""
     secondary = SECONDARY_IDS if isinstance(SECONDARY_IDS, list) else []
-    ids = [SOLUTION_ID, *(s for s in secondary if isinstance(s, str) and s)]
+    ids = [s for s in secondary if isinstance(s, str) and s] or [SOLUTION_ID]
     return " ".join(f"AWSSOLUTION/{sid}/{SOLUTION_VERSION}"
                     for sid in dict.fromkeys(ids))
 

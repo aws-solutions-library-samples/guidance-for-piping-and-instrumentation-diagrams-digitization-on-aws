@@ -420,7 +420,7 @@ This Guidance reports two things to AWS, both built from `solution.json` at the 
   `(<id>) (<secondary id>) - <solution name>. Version <version>`; the network stack carries
   `(<id>-network) (<secondary id>-network)` so one installation is counted once.
 - **API usage.** AWS SDK calls made by the agent runtime, the Lambdas and the local digitizer add
-  `AWSSOLUTION/<id>/<version> AWSSOLUTION/<secondary id>/<version>` to their `User-Agent` header.
+  `AWSSOLUTION/<secondary id>/<version>` to their `User-Agent` header.
 
 Neither contains anything about you, your account or your drawings: the id and version are the same
 for everyone who deploys this repository, and no resource tags are involved. To opt out, delete the
