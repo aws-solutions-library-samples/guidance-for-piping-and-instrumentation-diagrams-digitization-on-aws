@@ -43,7 +43,7 @@ MODELS = {
     "GPT-6.1 Terra": "us.openai.gpt-6.1-terra",
     "Claude Opus 5.5": "global.anthropic.claude-opus-5-5",  # US profile kept returning ServiceUnavailable
     "Claude Sonnet 5.5": "us.anthropic.claude-sonnet-5-5",
-    "Claude Fable 5.2": "us.anthropic.claude-fable-5-2",  # needs account data retention aws_review (set per Region)
+    "Claude Fable 5.2": "global.anthropic.claude-fable-5-2",  # needs data retention aws_review in the calling Region
     "GPT-6.2 Astra": "global.openai.gpt-6.2-astra",
     "GPT-6.2 Sol": "us.openai.gpt-6.2-sol",
 }
@@ -58,8 +58,8 @@ PRICES = {
     "us.openai.gpt-6.1-terra": (1.10, 5.50, 1.375, 0.055),
     "global.anthropic.claude-opus-5-5": (4.00, 20.00, 5.00, 0.20),
     "us.anthropic.claude-sonnet-5-5": (2.20, 11.00, 2.75, 0.11),
-    "us.anthropic.claude-fable-5-2": (8.00, 40.00, 10.00, 0.20),  # Bedrock price list, 2026-11-18 (5-minute cache write)
-    "global.openai.gpt-6.2-astra": (8.80, 44.00, 11.00, 0.44),  # Bedrock price list, In-Region, 2026-11-18
+    "global.anthropic.claude-fable-5-2": (8.00, 40.00, 10.00, 0.20),  # Bedrock price list, Global CRIS, 2026-11-18 (5-minute cache write)
+    "global.openai.gpt-6.2-astra": (8.00, 40.00, 10.00, 0.40),  # Bedrock price list, Global CRIS, 2026-11-18
     # GPT-6.2 Sol: no published price on 2026-11-18, so no entry (cost() reports unknown)
 }
 DEFAULT_MODEL = "opus"  # with --detect single and --review-model sol: the deployed default (README)
