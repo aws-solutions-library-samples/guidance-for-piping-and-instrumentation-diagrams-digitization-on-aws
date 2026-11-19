@@ -209,7 +209,8 @@ All three modes were run on the same 10 sheets and scored the same way:
 
 The review can run on another model than detection (`review.modelId`). With the same drafts, a
 Claude Opus 5.5 draft reviewed by GPT-6.1 Sol was compared with a GPT-6.1 Sol draft reviewed by
-Claude Opus 5.5:
+Claude Opus 5.5. The GPT-6.2 Sol rows were measured later (November 2026); each GPT-6.2 Sol draft
+was reviewed by both GPT-6.2 Sol and Claude Opus 5.5:
 
 | Mode | Draft | Review | Label accuracy (F1) | Valve tags P / R | Instruments P / R | Line numbers P / R | Connections P / R | Connections F1 | Review cost per sheet |
 |---|---|---|---|---|---|---|---|---|---|
@@ -221,9 +222,18 @@ Claude Opus 5.5:
 | single | Claude Opus 5.5 | GPT-6.1 Sol | **99%** | 99% / 99% | 98% / 98% | 100% / 100% | 91% / 89% | **90%** | $0.32 |
 | single | GPT-6.1 Sol | GPT-6.1 Sol | 96% | 96% / 95% | 99% / 99% | 95% / 95% | 89% / 88% | 89% | $0.31 |
 | single | GPT-6.1 Sol | Claude Opus 5.5 | 96% | 96% / 95% | 99% / 98% | 96% / 96% | 87% / 85% | 86% | $3.08 |
+| tiled | GPT-6.2 Sol | GPT-6.2 Sol | **99%** | 100% / 100% | 99% / 98% | 94% / 100% | 90% / 88% | 89% | $0.07 |
+| tiled | GPT-6.2 Sol | Claude Opus 5.5 | **100%** | 100% / 100% | 99% / 99% | 100% / 100% | 90% / 88% | 89% | $1.29 |
+| single | Claude Opus 5.5 | GPT-6.2 Sol | **99%** | 99% / 99% | 99% / 99% | 99% / 99% | 81% / 75% | 78% | $0.04 |
+| single | GPT-6.2 Sol | GPT-6.2 Sol | 95% | 100% / 90% | 98% / 90% | 100% / 93% | 88% / 78% | 83% | $0.04 |
+| single | GPT-6.2 Sol | Claude Opus 5.5 | **99%** | 100% / 98% | 98% / 100% | 100% / 100% | 90% / 88% | 89% | $2.36 |
 
 - GPT-6.1 Sol is the better reviewer for both drafts, at about a tenth of the cost of a Claude
   Opus 5.5 review. Reviewing with Claude Opus 5.5 never improved on a GPT-6.1 Sol review.
+- GPT-6.2 Sol drafts well but reviews little: it seldom zooms in and often stops before it has
+  checked the whole sheet. As the reviewer of a Claude Opus 5.5 single draft it leaves connections
+  at 78% F1, against 90% with GPT-6.1 Sol. A Claude Opus 5.5 review of a GPT-6.2 Sol draft fixes
+  labels but not connections, at many times the cost.
 - Claude Opus 5.5 drafting in single mode with a GPT-6.1 Sol review is the most accurate configuration
   measured, for about $0.70 a sheet in total. A second run of it gave 99% label accuracy and 91%
   connection F1 for $0.68 a sheet. Single sheets moved by up to 9 points between the two runs, so
