@@ -73,11 +73,11 @@ each mode:
 | Single, GPT-6 Astra | 95% | 88% | $0.66 |
 
 - **Tiled** reads small text best. Use it for dense or large sheets, and when tag accuracy matters most.
-- **Single + review** costs about a third as much as tiled with the GPT models and traces
-  connections about as well. With Claude Opus it is more accurate than tiled. Claude Sonnet ends its
-  review early, so with Sonnet use tiled.
+- **Single + review** costs about a third as much as tiled with GPT-6.1 Sol and GPT-6 Astra and
+  traces connections about as well. With Claude Opus 5.5 it is more accurate than tiled. Claude
+  Sonnet 5.5 ends its review early, so with Claude Sonnet 5.5 use tiled.
 - **Single** is the cheapest and fastest. It is weaker on connections, and some models (GPT-6.1
-  Terra) miss many items in one call. Use it for quick previews, or with GPT-6 Astra or Claude Opus.
+  Terra) miss many items in one call. Use it for quick previews, or with GPT-6 Astra or Claude Opus 5.5.
 
 The single modes see the sheet at 2,576 px on the long edge, so on dense or poorly scanned sheets
 expect them to lose more accuracy than on the benchmark. Try a few of your own sheets in each
@@ -87,8 +87,8 @@ mode before you settle on one.
 
 `review.modelId` runs the review agent on another model than detection. On the 10-sheet
 benchmark ([README](../README.md#mixing-models)), GPT-6.1 Sol was the better reviewer for every
-draft, and costs about $0.30 a sheet against $2–3 for a Claude Opus review. The best combination
-measured so far is single-mode detection on Claude Opus with a GPT-6.1 Sol review:
+draft, and costs about $0.30 a sheet against $2–3 for a Claude Opus 5.5 review. The best combination
+measured so far is single-mode detection on Claude Opus 5.5 with a GPT-6.1 Sol review:
 
 ```json
 { "modelId": "global.anthropic.claude-opus-5-5", "detect": "single",
@@ -103,7 +103,7 @@ $0.70 a sheet; tiled mode with GPT-6.1 Sol for both steps reaches 99% and 89% fo
 ### Choosing a model
 
 In tiled mode on the 10-sheet benchmark in the [README](../README.md#accuracy-and-model-choice),
-every allowed model except Opus reached 99% label accuracy. The choice is mostly about connection tracing and cost:
+every allowed model except Claude Opus 5.5 reached 99% label accuracy. The choice is mostly about connection tracing and cost:
 
 - **GPT-6.1 Sol**: good tracing (89% connection F1) at $1.24 a sheet.
 - **GPT-6.1 Terra**: the cheapest ($0.55 a sheet) and the fastest, with slightly weaker tracing

@@ -104,10 +104,13 @@ them from the authors' release.
 | Model | Label accuracy (F1) | Valve tags P / R | Instruments P / R | Line numbers P / R | Connections P / R | Connections F1 | Cost per sheet | Time per sheet |
 |---|---|---|---|---|---|---|---|---|
 | GPT-6.1 Sol | **99%** | 99% / 99% | 97% / 96% | 99% / 99% | 90% / 88% | **89%** | $1.24 | 5.8 min |
-| GPT-6.1 Terra | **99%** | 100% / 99% | 100% / 95% | 100% / 100% | 86% / 88% | 87% | **$0.55** | **3.0 min** |
+| GPT-6.1 Terra | **99%** | 100% / 99% | 100% / 95% | 100% / 100% | 86% / 88% | 87% | $0.55 | 3.0 min |
 | GPT-6 Astra | **99%** | 100% / 99% | 99% / 93% | 100% / 100% | 93% / 89% | **91%** | $6.79 | 5.3 min |
+| GPT-6.2 Sol | **99%** | 100% / 100% | 99% / 98% | 94% / 100% | 90% / 88% | **89%** | **$0.32** | **0.8 min** |
+| GPT-6.2 Astra | **100%** | 100% / 100% | 100% / 100% | 100% / 100% | 93% / 90% | **92%** | $1.23 | 3.0 min |
 | Claude Sonnet 5.5 | **99%** | 100% / 99% | 95% / 97% | 97% / 100% | 84% / 79% | 81% | $1.39 | 5.3 min |
 | Claude Opus 5.5 | 96% | 100% / 98% | 85% / 86% | 100% / 100% | 88% / 85% | 87% | $3.31 | 5.4 min |
+| Claude Fable 5.2 | **100%** | 100% / 100% | 100% / 100% | 100% / 100% | 93% / 89% | **91%** | $7.43 | 8.3 min |
 
 - **P (precision)** is the share of reported items that are correct. **R (recall)** is the share of
   items on the sheet that were found. Counts are pooled over all 10 sheets before P, R and F1 are
@@ -119,10 +122,16 @@ them from the authors' release.
   connection key. The keys were generated from the dataset's ground truth; on sheet 1 the generated
   key was checked against a hand-made one.
 - **Cost** uses on-demand list prices, with no discounts.
+- GPT-6.2 Sol, GPT-6.2 Astra and Claude Fable 5.2 were measured later (November 2026). They are
+  not in the deployment's default `allowedModelIds`; add them there to use them (see
+  [Configuration](docs/CONFIGURATION.md)). Claude Fable 5.2 also needs the account's Bedrock data
+  retention mode set to `aws_review` in the Region that calls it (see
+  [Data retention](https://docs.aws.amazon.com/bedrock/latest/userguide/data-retention.html)).
 
 Every model labels almost everything correctly. The models differ mainly in how well they trace
-connections, and in cost. Astra traces best at about 5× the cost of Sol. Terra costs less than
-half as much as Sol for slightly weaker tracing.
+connections, and in cost. GPT-6.2 Astra labels every item correctly and traces best, for about
+the cost of GPT-6.1 Sol. GPT-6.2 Sol matches GPT-6.1 Sol for about a quarter of the cost, and is
+the fastest. Claude Fable 5.2 is as accurate as GPT-6.2 Astra at about 6× its cost.
 
 Results on your drawings will differ. Before you choose a model, score a few of your own sheets
 with the local scorer (see [Run locally](#run-locally)).
@@ -134,8 +143,7 @@ against the same keys:
 
 | Pipeline | Label accuracy (F1) | Valve tags P / R | Instruments P / R | Line numbers P / R | Connections P / R | Connections F1 |
 |---|---|---|---|---|---|---|
-| Version 2, default (Claude Opus single call, GPT-6.1 Sol review) | **99%** | 99% / 98% | 99% / 99% | 100% / 100% | 92% / 90% | **91%** |
-| Version 2, GPT-6.1 Sol tiled | **99%** | 99% / 99% | 97% / 96% | 99% / 99% | 90% / 88% | 89% |
+| Version 2, default (Claude Opus 5.5 single call, GPT-6.1 Sol review) | **99%** | 99% / 98% | 99% / 99% | 100% / 100% | 92% / 90% | **91%** |
 | Version 1 | 74% | 98% / 72% | 0% / 0% | 100% / 92% | 11% / 35% | 17% |
 
 - Version 1 ran with its default settings, except that the notes boundary was given as
@@ -184,15 +192,15 @@ All three modes were run on the same 10 sheets and scored the same way:
 | Claude Opus 5.5 | single + review | **98%** | 98% / 98% | 97% / 97% | 100% / 100% | 90% / 88% | **89%** | $3.45 | 6.1 min |
 | Claude Opus 5.5 | single | **99%** | 98% / 98% | 99% / 99% | 100% / 100% | 85% / 78% | 82% | $0.38 | 2.5 min |
 
-- **Tiled** gives the best labels with every GPT model, because small tags are read at full
-  resolution.
+- **Tiled** gives the best labels with GPT-6.1 Sol, GPT-6.1 Terra and GPT-6 Astra, because small
+  tags are read at full resolution.
 - **Single + review** traces connections as well as tiled with GPT-6.1 Sol, GPT-6 Astra and Claude
-  Opus, at about a third of the cost with the GPT models. With Claude Opus it beats tiled, which
-  lowers Opus's instrument precision. Claude Sonnet ends its review after a few views, so it gains
-  little.
-- **Single** costs about a tenth of tiled. The Claude models already read 99% of the labels in one
-  call, but every model traces connections worse than in tiled mode, and GPT-6.1 Terra misses about
-  a quarter of the items.
+  Opus 5.5, at about a third of the cost with GPT-6.1 Sol and GPT-6 Astra. With Claude Opus 5.5 it
+  beats tiled, which lowers Claude Opus 5.5's instrument precision. Claude Sonnet 5.5 ends its
+  review after a few views, so it gains little.
+- **Single** costs about a tenth of tiled. Claude Sonnet 5.5 and Claude Opus 5.5 already read 99% of
+  the labels in one call, but every model traces connections worse than in tiled mode, and
+  GPT-6.1 Terra misses about a quarter of the items.
 - These sheets are clean, synthetic drawings that stay readable when scaled down. Expect the single
   modes to lose more on dense or poorly scanned sheets. Each mode ran once per sheet, so
   differences of a few points are within run-to-run variation.
@@ -200,23 +208,33 @@ All three modes were run on the same 10 sheets and scored the same way:
 ### Mixing models
 
 The review can run on another model than detection (`review.modelId`). With the same drafts, a
-Claude Opus 5.5 draft reviewed by GPT-6.1 Sol was compared with a GPT-6.1 Sol draft reviewed by Claude
-Opus 5.5:
+Claude Opus 5.5 draft reviewed by GPT-6.1 Sol was compared with a GPT-6.1 Sol draft reviewed by
+Claude Opus 5.5. The GPT-6.2 Sol rows were measured later (November 2026); each GPT-6.2 Sol draft
+was reviewed by both GPT-6.2 Sol and Claude Opus 5.5:
 
 | Mode | Draft | Review | Label accuracy (F1) | Valve tags P / R | Instruments P / R | Line numbers P / R | Connections P / R | Connections F1 | Review cost per sheet |
 |---|---|---|---|---|---|---|---|---|---|
-| tiled | Claude Opus | Claude Opus | 96% | 100% / 98% | 85% / 86% | 100% / 100% | 88% / 85% | 87% | — |
-| tiled | Claude Opus | GPT-6.1 Sol | 98% | 100% / 98% | 93% / 90% | 100% / 100% | 90% / 87% | 88% | $0.30 |
+| tiled | Claude Opus 5.5 | Claude Opus 5.5 | 96% | 100% / 98% | 85% / 86% | 100% / 100% | 88% / 85% | 87% | — |
+| tiled | Claude Opus 5.5 | GPT-6.1 Sol | 98% | 100% / 98% | 93% / 90% | 100% / 100% | 90% / 87% | 88% | $0.30 |
 | tiled | GPT-6.1 Sol | GPT-6.1 Sol | **99%** | 99% / 99% | 97% / 96% | 99% / 99% | 90% / 88% | 89% | — |
-| tiled | GPT-6.1 Sol | Claude Opus | **99%** | 99% / 99% | 97% / 95% | 99% / 99% | 88% / 87% | 88% | $2.15 |
-| single | Claude Opus | Claude Opus | 98% | 98% / 98% | 97% / 97% | 100% / 100% | 90% / 88% | 89% | $3.06 |
-| single | Claude Opus | GPT-6.1 Sol | **99%** | 99% / 99% | 98% / 98% | 100% / 100% | 91% / 89% | **90%** | $0.32 |
+| tiled | GPT-6.1 Sol | Claude Opus 5.5 | **99%** | 99% / 99% | 97% / 95% | 99% / 99% | 88% / 87% | 88% | $2.15 |
+| single | Claude Opus 5.5 | Claude Opus 5.5 | 98% | 98% / 98% | 97% / 97% | 100% / 100% | 90% / 88% | 89% | $3.06 |
+| single | Claude Opus 5.5 | GPT-6.1 Sol | **99%** | 99% / 99% | 98% / 98% | 100% / 100% | 91% / 89% | **90%** | $0.32 |
 | single | GPT-6.1 Sol | GPT-6.1 Sol | 96% | 96% / 95% | 99% / 99% | 95% / 95% | 89% / 88% | 89% | $0.31 |
-| single | GPT-6.1 Sol | Claude Opus | 96% | 96% / 95% | 99% / 98% | 96% / 96% | 87% / 85% | 86% | $3.08 |
+| single | GPT-6.1 Sol | Claude Opus 5.5 | 96% | 96% / 95% | 99% / 98% | 96% / 96% | 87% / 85% | 86% | $3.08 |
+| tiled | GPT-6.2 Sol | GPT-6.2 Sol | **99%** | 100% / 100% | 99% / 98% | 94% / 100% | 90% / 88% | 89% | $0.07 |
+| tiled | GPT-6.2 Sol | Claude Opus 5.5 | **100%** | 100% / 100% | 99% / 99% | 100% / 100% | 90% / 88% | 89% | $1.29 |
+| single | Claude Opus 5.5 | GPT-6.2 Sol | **99%** | 99% / 99% | 99% / 99% | 99% / 99% | 81% / 75% | 78% | $0.04 |
+| single | GPT-6.2 Sol | GPT-6.2 Sol | 95% | 100% / 90% | 98% / 90% | 100% / 93% | 88% / 78% | 83% | $0.04 |
+| single | GPT-6.2 Sol | Claude Opus 5.5 | **99%** | 100% / 98% | 98% / 100% | 100% / 100% | 90% / 88% | 89% | $2.36 |
 
-- GPT-6.1 Sol is the better reviewer for both drafts, at about a tenth of the cost of a Claude Opus
-  review. Reviewing with Claude Opus never improved on a GPT-6.1 Sol review.
-- Claude Opus drafting in single mode with a GPT-6.1 Sol review is the most accurate configuration
+- GPT-6.1 Sol is the better reviewer for both drafts, at about a tenth of the cost of a Claude
+  Opus 5.5 review. Reviewing with Claude Opus 5.5 never improved on a GPT-6.1 Sol review.
+- GPT-6.2 Sol drafts well but reviews little: it seldom zooms in and often stops before it has
+  checked the whole sheet. As the reviewer of a Claude Opus 5.5 single draft it leaves connections
+  at 78% F1, against 90% with GPT-6.1 Sol. A Claude Opus 5.5 review of a GPT-6.2 Sol draft fixes
+  labels but not connections, at many times the cost.
+- Claude Opus 5.5 drafting in single mode with a GPT-6.1 Sol review is the most accurate configuration
   measured, for about $0.70 a sheet in total. A second run of it gave 99% label accuracy and 91%
   connection F1 for $0.68 a sheet. Single sheets moved by up to 9 points between the two runs, so
   read small differences in these tables with care.

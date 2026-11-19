@@ -14,7 +14,7 @@ either way. Connections are derived from the runs. The pre-review result is kept
 violations found in the draft (pidtwin.graph.validate) are handed to the review agent as hints.
 Artifacts go to a sink (artifacts.py): local files here, S3 when running in AgentCore Runtime.
 
-Usage: python -m pidtwin.digitize.pipeline [--detect single|tiled] [--no-review] [--review-model sol|same]
+Usage: python -m pidtwin.digitize.pipeline [--detect single|tiled] [--no-review] [--review-model "6.1 sol"|same]
            [--resume] [--models opus,sol|all] [image|pdf ...]
        (default: Claude Opus 5.5 single call + GPT-6.1 Sol review on every image in samples/; results in results/)
 Ground truth: samples/<name>.truth.json alongside the image (optional).
@@ -43,6 +43,9 @@ MODELS = {
     "GPT-6.1 Terra": "us.openai.gpt-6.1-terra",
     "Claude Opus 5.5": "global.anthropic.claude-opus-5-5",  # US profile kept returning ServiceUnavailable
     "Claude Sonnet 5.5": "us.anthropic.claude-sonnet-5-5",
+    "Claude Fable 5.2": "global.anthropic.claude-fable-5-2",  # needs data retention aws_review in the calling Region
+    "GPT-6.2 Astra": "global.openai.gpt-6.2-astra",
+    "GPT-6.2 Sol": "us.openai.gpt-6.2-sol",
 }
 # USD per 1M tokens: (input, output, cache write, cache read), on-demand standard tier, 2026-10-08.
 # Source: AWS Pricing API (AmazonBedrockFoundationModels / AmazonBedrock, us-east-1) except GPT-6.1 Sol
@@ -55,6 +58,9 @@ PRICES = {
     "us.openai.gpt-6.1-terra": (1.10, 5.50, 1.375, 0.055),
     "global.anthropic.claude-opus-5-5": (4.00, 20.00, 5.00, 0.20),
     "us.anthropic.claude-sonnet-5-5": (2.20, 11.00, 2.75, 0.11),
+    "global.anthropic.claude-fable-5-2": (8.00, 40.00, 10.00, 0.20),  # Bedrock price list, Global CRIS, 2026-11-18 (5-minute cache write)
+    "global.openai.gpt-6.2-astra": (8.00, 40.00, 10.00, 0.40),  # Bedrock price list, Global CRIS, 2026-11-18
+    "us.openai.gpt-6.2-sol": (2.20, 11.00, 2.75, 0.11),  # Bedrock price list, Geo CRIS, <=272K-token requests, 2026-11-18
 }
 DEFAULT_MODEL = "opus"  # with --detect single and --review-model sol: the deployed default (README)
 USAGE_KEYS = ("inputTokens", "outputTokens", "cacheWriteInputTokens", "cacheReadInputTokens")
@@ -89,7 +95,8 @@ CATEGORY_DOC = """Categories:
 - valve: any valve body (gate, globe, ball, butterfly, check, control, relief, solenoid, ...);
   type = the valve kind; tag = printed tag or null.
 - instrument: ISA bubbles, discs, shared-display squares; tag = letters + "-" + loop number on one
-  line (e.g. "FT-101"); put any extra text inside the symbol in "text".
+  line (e.g. "FT-101"). A tag printed on two lines is joined with "-", never run together
+  ("RO-10" over "202" is "RO-10-202", not "RO-10202"); put any extra text inside the symbol in "text".
 - fitting: inline or terminal piping items - end cap / blind flange (short double bar at a line
   end), spectacle blind, orifice or flange pair (double bar across a line, often with a size label),
   reducer, strainer, insulation or tracing segment, drain / vent / ground-style termination
@@ -604,8 +611,8 @@ if __name__ == "__main__":
     ap.add_argument("--detect", choices=("tiled", "single"), default="single",
                     help="one call on the whole sheet (default), or tiled detect + trace")
     ap.add_argument("--no-review", action="store_true", help="skip the Strands review agent")
-    ap.add_argument("--review-model", default="sol",
-                    help="run the review on this model (a substring of a model name; default: sol), "
+    ap.add_argument("--review-model", default="6.1 sol",
+                    help="run the review on this model (a substring of a model name; default: 6.1 sol), "
                          "or 'same' to review with the detect model")
     ap.add_argument("--models", default=DEFAULT_MODEL,
                     help=f"comma-separated substrings of model names, e.g. sonnet,opus, or all (default: {DEFAULT_MODEL})")
