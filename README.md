@@ -212,21 +212,21 @@ Claude Opus 5.5 draft reviewed by GPT-6.1 Sol was compared with a GPT-6.1 Sol dr
 Claude Opus 5.5. The GPT-6.2 Sol rows were measured later (November 2026); each GPT-6.2 Sol draft
 was reviewed by both GPT-6.2 Sol and Claude Opus 5.5:
 
-| Mode | Draft | Review | Label accuracy (F1) | Valve tags P / R | Instruments P / R | Line numbers P / R | Connections P / R | Connections F1 | Review cost per sheet |
+| Mode | Draft | Review | Label accuracy (F1) | Valve tags P / R | Instruments P / R | Line numbers P / R | Connections P / R | Connections F1 | Cost per sheet |
 |---|---|---|---|---|---|---|---|---|---|
-| tiled | Claude Opus 5.5 | Claude Opus 5.5 | 96% | 100% / 98% | 85% / 86% | 100% / 100% | 88% / 85% | 87% | — |
-| tiled | Claude Opus 5.5 | GPT-6.1 Sol | 98% | 100% / 98% | 93% / 90% | 100% / 100% | 90% / 87% | 88% | $0.30 |
-| tiled | GPT-6.1 Sol | GPT-6.1 Sol | **99%** | 99% / 99% | 97% / 96% | 99% / 99% | 90% / 88% | 89% | — |
-| tiled | GPT-6.1 Sol | Claude Opus 5.5 | **99%** | 99% / 99% | 97% / 95% | 99% / 99% | 88% / 87% | 88% | $2.15 |
-| single | Claude Opus 5.5 | Claude Opus 5.5 | 98% | 98% / 98% | 97% / 97% | 100% / 100% | 90% / 88% | 89% | $3.06 |
-| single | Claude Opus 5.5 | GPT-6.1 Sol | **99%** | 99% / 99% | 98% / 98% | 100% / 100% | 91% / 89% | **90%** | $0.32 |
-| single | GPT-6.1 Sol | GPT-6.1 Sol | 96% | 96% / 95% | 99% / 99% | 95% / 95% | 89% / 88% | 89% | $0.31 |
-| single | GPT-6.1 Sol | Claude Opus 5.5 | 96% | 96% / 95% | 99% / 98% | 96% / 96% | 87% / 85% | 86% | $3.08 |
-| tiled | GPT-6.2 Sol | GPT-6.2 Sol | **99%** | 100% / 100% | 99% / 98% | 94% / 100% | 90% / 88% | 89% | $0.07 |
-| tiled | GPT-6.2 Sol | Claude Opus 5.5 | **100%** | 100% / 100% | 99% / 99% | 100% / 100% | 90% / 88% | 89% | $1.29 |
-| single | Claude Opus 5.5 | GPT-6.2 Sol | **99%** | 99% / 99% | 99% / 99% | 99% / 99% | 81% / 75% | 78% | $0.04 |
-| single | GPT-6.2 Sol | GPT-6.2 Sol | 95% | 100% / 90% | 98% / 90% | 100% / 93% | 88% / 78% | 83% | $0.04 |
-| single | GPT-6.2 Sol | Claude Opus 5.5 | **99%** | 100% / 98% | 98% / 100% | 100% / 100% | 90% / 88% | 89% | $2.36 |
+| tiled | Claude Opus 5.5 | Claude Opus 5.5 | 96% | 100% / 98% | 85% / 86% | 100% / 100% | 88% / 85% | 87% | $3.31 |
+| tiled | Claude Opus 5.5 | GPT-6.1 Sol | 98% | 100% / 98% | 93% / 90% | 100% / 100% | 90% / 87% | 88% | $0.91 |
+| tiled | GPT-6.1 Sol | GPT-6.1 Sol | **99%** | 99% / 99% | 97% / 96% | 99% / 99% | 90% / 88% | 89% | $1.24 |
+| tiled | GPT-6.1 Sol | Claude Opus 5.5 | **99%** | 99% / 99% | 97% / 95% | 99% / 99% | 88% / 87% | 88% | $2.46 |
+| single | Claude Opus 5.5 | Claude Opus 5.5 | 98% | 98% / 98% | 97% / 97% | 100% / 100% | 90% / 88% | 89% | $3.44 |
+| single | Claude Opus 5.5 | GPT-6.1 Sol | **99%** | 99% / 99% | 98% / 98% | 100% / 100% | 91% / 89% | **90%** | $0.70 |
+| single | GPT-6.1 Sol | GPT-6.1 Sol | 96% | 96% / 95% | 99% / 99% | 95% / 95% | 89% / 88% | 89% | $0.43 |
+| single | GPT-6.1 Sol | Claude Opus 5.5 | 96% | 96% / 95% | 99% / 98% | 96% / 96% | 87% / 85% | 86% | $3.20 |
+| tiled | GPT-6.2 Sol | GPT-6.2 Sol | **99%** | 100% / 100% | 99% / 98% | 94% / 100% | 90% / 88% | 89% | $0.32 |
+| tiled | GPT-6.2 Sol | Claude Opus 5.5 | **100%** | 100% / 100% | 99% / 99% | 100% / 100% | 90% / 88% | 89% | $1.54 |
+| single | Claude Opus 5.5 | GPT-6.2 Sol | **99%** | 99% / 99% | 99% / 99% | 99% / 99% | 81% / 75% | 78% | $0.41 |
+| single | GPT-6.2 Sol | GPT-6.2 Sol | 95% | 100% / 90% | 98% / 90% | 100% / 93% | 88% / 78% | 83% | $0.12 |
+| single | GPT-6.2 Sol | Claude Opus 5.5 | **99%** | 100% / 98% | 98% / 100% | 100% / 100% | 90% / 88% | 89% | $2.44 |
 
 - GPT-6.1 Sol is the better reviewer for both drafts, at about a tenth of the cost of a Claude
   Opus 5.5 review. Reviewing with Claude Opus 5.5 never improved on a GPT-6.1 Sol review.
@@ -238,8 +238,8 @@ was reviewed by both GPT-6.2 Sol and Claude Opus 5.5:
   measured, for about $0.70 a sheet in total. A second run of it gave 99% label accuracy and 91%
   connection F1 for $0.68 a sheet. Single sheets moved by up to 9 points between the two runs, so
   read small differences in these tables with care.
-- The review cost is what the reviewer spent; the draft cost depends on the draft model and mode
-  (see [Detection modes](#detection-modes)).
+- Cost per sheet is the draft and the review together. Where the review ran on a saved draft, it
+  is the draft's cost from a separate run plus what the reviewer spent.
 
 ## Cost
 
